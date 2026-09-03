@@ -1,42 +1,53 @@
-import { randomUUID } from "node:crypto";
-import { db } from "./db";
+/**
+ * Client-side watchlist storage. This app is a static export (GitHub
+ * Pages) with no server, so the watch list and last-checked timestamp
+ * live entirely in the visitor's own browser (localStorage) — nothing
+ * is sent anywhere, which is also what keeps one visitor's list private
+ * from anyone else without needing accounts or a login.
+ */
 
 export interface WatchedCompany {
   id: string;
-  userId: string;
   code: string;
   name: string;
   createdAt: string;
 }
 
-interface WatchedCompanyRow {
-  id: string;
-  user_id: string;
-  code: string;
-  name: string;
-  created_at: string;
+const COMPANIES_KEY = "ir-watch:companies";
+const LAST_CHECKED_KEY = "ir-watch:last-checked-at";
+
+export interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
 }
 
-function rowToCompany(row: WatchedCompanyRow): WatchedCompany {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    code: row.code,
-    name: row.name,
-    createdAt: row.created_at,
-  };
+function getStorage(storage?: StorageLike): StorageLike | null {
+  if (storage) return storage;
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
 }
 
-export function listWatchedCompanies(userId: string): WatchedCompany[] {
-  const rows = db
-    .prepare(
-      `SELECT id, user_id, code, name, created_at
-       FROM watched_companies
-       WHERE user_id = ?
-       ORDER BY created_at ASC`
-    )
-    .all(userId) as WatchedCompanyRow[];
-  return rows.map(rowToCompany);
+function readCompanies(storage?: StorageLike): WatchedCompany[] {
+  const store = getStorage(storage);
+  if (!store) return [];
+  const raw = store.getItem(COMPANIES_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCompanies(companies: WatchedCompany[], storage?: StorageLike): void {
+  const store = getStorage(storage);
+  if (!store) return;
+  store.setItem(COMPANIES_KEY, JSON.stringify(companies));
+}
+
+export function listWatchedCompanies(storage?: StorageLike): WatchedCompany[] {
+  return readCompanies(storage);
 }
 
 export class DuplicateCompanyError extends Error {
@@ -47,55 +58,45 @@ export class DuplicateCompanyError extends Error {
 }
 
 export function addWatchedCompany(
-  userId: string,
   code: string,
-  name: string
+  name: string,
+  storage?: StorageLike
 ): WatchedCompany {
-  const existing = db
-    .prepare(
-      `SELECT id, user_id, code, name, created_at
-       FROM watched_companies
-       WHERE user_id = ? AND code = ?`
-    )
-    .get(userId, code) as WatchedCompanyRow | undefined;
-  if (existing) {
+  const companies = readCompanies(storage);
+  if (companies.some((c) => c.code === code)) {
     throw new DuplicateCompanyError(code);
   }
 
-  const row: WatchedCompanyRow = {
-    id: randomUUID(),
-    user_id: userId,
+  const company: WatchedCompany = {
+    id: typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${code}-${Date.now()}`,
     code,
     name,
-    created_at: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   };
 
-  db.prepare(
-    `INSERT INTO watched_companies (id, user_id, code, name, created_at)
-     VALUES (@id, @user_id, @code, @name, @created_at)`
-  ).run(row);
-
-  return rowToCompany(row);
+  writeCompanies([...companies, company], storage);
+  return company;
 }
 
-export function removeWatchedCompany(userId: string, id: string): boolean {
-  const result = db
-    .prepare(`DELETE FROM watched_companies WHERE id = ? AND user_id = ?`)
-    .run(id, userId);
-  return result.changes > 0;
+export function removeWatchedCompany(id: string, storage?: StorageLike): boolean {
+  const companies = readCompanies(storage);
+  const next = companies.filter((c) => c.id !== id);
+  if (next.length === companies.length) return false;
+  writeCompanies(next, storage);
+  return true;
 }
 
-export function getLastCheckedAt(userId: string): Date | null {
-  const row = db
-    .prepare(`SELECT last_checked_at FROM user_state WHERE user_id = ?`)
-    .get(userId) as { last_checked_at: string | null } | undefined;
-  return row?.last_checked_at ? new Date(row.last_checked_at) : null;
+export function getLastCheckedAt(storage?: StorageLike): Date | null {
+  const store = getStorage(storage);
+  if (!store) return null;
+  const raw = store.getItem(LAST_CHECKED_KEY);
+  return raw ? new Date(raw) : null;
 }
 
-export function setLastCheckedAt(userId: string, date: Date): void {
-  db.prepare(
-    `INSERT INTO user_state (user_id, last_checked_at)
-     VALUES (@user_id, @last_checked_at)
-     ON CONFLICT(user_id) DO UPDATE SET last_checked_at = excluded.last_checked_at`
-  ).run({ user_id: userId, last_checked_at: date.toISOString() });
+export function setLastCheckedAt(date: Date, storage?: StorageLike): void {
+  const store = getStorage(storage);
+  if (!store) return;
+  store.setItem(LAST_CHECKED_KEY, date.toISOString());
 }

@@ -8,6 +8,11 @@
  * of reasonable variants defensively since the exact response could not be
  * verified against a live call from this environment (outbound network here
  * is restricted to an allowlist that does not include this host).
+ *
+ * This app is a static export with no server, so these requests are made
+ * directly from the visitor's browser. That only works if the mirror sends
+ * CORS headers permitting cross-origin reads; this too could not be
+ * verified from this environment and should be checked once deployed.
  */
 
 export interface Disclosure {

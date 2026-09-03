@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { WatchedCompany } from "@/lib/watchlist";
-import type { Disclosure } from "@/lib/tdnet";
+import {
+  addWatchedCompany,
+  DuplicateCompanyError,
+  getLastCheckedAt,
+  listWatchedCompanies,
+  removeWatchedCompany,
+  setLastCheckedAt,
+  type WatchedCompany,
+} from "@/lib/watchlist";
+import { fetchRecentDisclosures, filterByCodes, type Disclosure } from "@/lib/tdnet";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
-
-interface Props {
-  initialCompanies: WatchedCompany[];
-}
 
 const CODE_PATTERN = /^[0-9]{4}$/;
 
@@ -23,8 +27,9 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function Dashboard({ initialCompanies }: Props) {
-  const [companies, setCompanies] = useState<WatchedCompany[]>(initialCompanies);
+export default function Dashboard() {
+  const [hydrated, setHydrated] = useState(false);
+  const [companies, setCompanies] = useState<WatchedCompany[]>([]);
   const [disclosures, setDisclosures] = useState<DisclosureItem[]>([]);
   const [loadingDisclosures, setLoadingDisclosures] = useState(false);
   const [disclosuresError, setDisclosuresError] = useState<string | null>(null);
@@ -32,35 +37,49 @@ export default function Dashboard({ initialCompanies }: Props) {
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
-  const loadDisclosures = useCallback(async () => {
+  const loadDisclosures = useCallback(async (watchList: WatchedCompany[]) => {
+    if (watchList.length === 0) {
+      setDisclosures([]);
+      return;
+    }
     setLoadingDisclosures(true);
     setDisclosuresError(null);
     try {
-      const res = await fetch("/api/disclosures");
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "開示情報の取得に失敗しました");
-      }
-      setDisclosures(data.disclosures);
-    } catch (err) {
-      setDisclosuresError(err instanceof Error ? err.message : "開示情報の取得に失敗しました");
+      const previousCheckedAt = getLastCheckedAt();
+      const all = await fetchRecentDisclosures(7);
+      const filtered = filterByCodes(all, watchList.map((c) => c.code));
+      const withFlags = filtered.map((d) => ({
+        ...d,
+        isNew: previousCheckedAt ? new Date(d.publishedAt) > previousCheckedAt : true,
+      }));
+      setDisclosures(withFlags);
+      setLastCheckedAt(new Date());
+    } catch {
+      setDisclosuresError(
+        "開示情報の取得に失敗しました。ネットワーク接続を確認するか、しばらくしてから再度お試しください。"
+      );
     } finally {
       setLoadingDisclosures(false);
     }
   }, []);
 
   useEffect(() => {
-    if (companies.length === 0) return;
-    // Defer to a microtask so the fetch's state updates don't run
+    // Defer to a microtask so these state updates (hydrating from
+    // localStorage, which is only available client-side) don't run
     // synchronously within the effect body itself.
     queueMicrotask(() => {
-      void loadDisclosures();
+      const initial = listWatchedCompanies();
+      setCompanies(initial);
+      setHydrated(true);
+      if (initial.length > 0) {
+        void loadDisclosures(initial);
+      }
     });
-  }, [companies.length, loadDisclosures]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function handleAddCompany(e: React.FormEvent) {
+  function handleAddCompany(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
 
@@ -76,48 +95,33 @@ export default function Dashboard({ initialCompanies }: Props) {
       return;
     }
 
-    setSubmitting(true);
     try {
-      const res = await fetch("/api/watchlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, name }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "登録に失敗しました");
-      }
-      setCompanies((prev) => [...prev, data.company]);
+      const company = addWatchedCompany(code, name);
+      const next = [...companies, company];
+      setCompanies(next);
       setCodeInput("");
       setNameInput("");
+      void loadDisclosures(next);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "登録に失敗しました");
-    } finally {
-      setSubmitting(false);
+      setFormError(
+        err instanceof DuplicateCompanyError ? "既に登録済みの銘柄です" : "登録に失敗しました"
+      );
     }
   }
 
-  async function handleRemoveCompany(id: string) {
-    const previous = companies;
-    setCompanies((prev) => prev.filter((c) => c.id !== id));
-    try {
-      const res = await fetch(`/api/watchlist/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        throw new Error();
-      }
-    } catch {
-      setCompanies(previous);
-    }
+  function handleRemoveCompany(id: string) {
+    removeWatchedCompany(id);
+    const next = companies.filter((c) => c.id !== id);
+    setCompanies(next);
+    void loadDisclosures(next);
   }
-
-  const watchedCodes = new Set(companies.map((c) => c.code));
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">IR Watch</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          東証(TDnet)の適時開示情報から、登録した銘柄の新着開示をまとめて確認できます。
+          東証(TDnet)の適時開示情報から、登録した銘柄の新着開示をまとめて確認できます。登録内容はこの端末のブラウザ内にのみ保存され、他の人には見えません。
         </p>
       </header>
 
@@ -153,15 +157,14 @@ export default function Dashboard({ initialCompanies }: Props) {
           </div>
           <button
             type="submit"
-            disabled={submitting}
-            className="mt-5 rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className="mt-5 rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             追加
           </button>
         </form>
         {formError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{formError}</p>}
 
-        {companies.length === 0 ? (
+        {!hydrated ? null : companies.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
             まだ銘柄が登録されていません。証券コードと会社名を入力して追加してください。
           </p>
@@ -193,8 +196,8 @@ export default function Dashboard({ initialCompanies }: Props) {
           <h2 className="text-lg font-medium">新着開示</h2>
           <button
             type="button"
-            onClick={() => void loadDisclosures()}
-            disabled={loadingDisclosures || watchedCodes.size === 0}
+            onClick={() => void loadDisclosures(companies)}
+            disabled={loadingDisclosures || companies.length === 0}
             className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
           >
             {loadingDisclosures ? "更新中..." : "更新"}
@@ -205,7 +208,7 @@ export default function Dashboard({ initialCompanies }: Props) {
           <p className="mt-3 text-sm text-red-600 dark:text-red-400">{disclosuresError}</p>
         )}
 
-        {watchedCodes.size === 0 ? (
+        {companies.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
             銘柄を登録すると、ここに開示情報が表示されます。
           </p>
