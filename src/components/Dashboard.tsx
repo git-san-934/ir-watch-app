@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   addWatchedCompany,
+  dismissDisclosure,
   DuplicateCompanyError,
+  getDismissedIds,
   getLastCheckedAt,
   listWatchedCompanies,
+  pruneDismissedIds,
   removeWatchedCompany,
   setLastCheckedAt,
   type WatchedCompany,
@@ -49,11 +52,17 @@ export default function Dashboard() {
     try {
       const previousCheckedAt = getLastCheckedAt();
       const snapshot = await fetchDisclosuresSnapshot();
-      const filtered = filterByCodes(snapshot.disclosures, watchList.map((c) => c.code));
-      const withFlags = filtered.map((d) => ({
-        ...d,
-        isNew: previousCheckedAt ? new Date(d.publishedAt) > previousCheckedAt : true,
-      }));
+      pruneDismissedIds(snapshot.disclosures.map((d) => d.id));
+      const dismissed = new Set(getDismissedIds());
+      const filtered = filterByCodes(snapshot.disclosures, watchList.map((c) => c.code)).filter(
+        (d) => !dismissed.has(d.id)
+      );
+      const withFlags = filtered
+        .map((d) => ({
+          ...d,
+          isNew: previousCheckedAt ? new Date(d.publishedAt) > previousCheckedAt : true,
+        }))
+        .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       setDisclosures(withFlags);
       setSnapshotGeneratedAt(snapshot.generatedAt);
       setLastCheckedAt(new Date());
@@ -116,6 +125,11 @@ export default function Dashboard() {
     const next = companies.filter((c) => c.id !== id);
     setCompanies(next);
     void loadDisclosures(next);
+  }
+
+  function handleDismissDisclosure(id: string) {
+    dismissDisclosure(id);
+    setDisclosures((prev) => prev.filter((d) => d.id !== id));
   }
 
   return (
@@ -227,25 +241,36 @@ export default function Dashboard() {
         ) : (
           <ul className="mt-4 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
             {disclosures.map((d) => (
-              <li key={d.id} className="flex flex-col gap-1 py-3">
-                <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {d.isNew && (
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                      NEW
-                    </span>
-                  )}
-                  <span>{d.code}</span>
-                  <span>{d.companyName}</span>
-                  <span>{formatDate(d.publishedAt)}</span>
+              <li key={d.id} className="flex items-start justify-between gap-3 py-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    {d.isNew && (
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                        NEW
+                      </span>
+                    )}
+                    <span>{d.code}</span>
+                    <span>{d.companyName}</span>
+                    <span>{formatDate(d.publishedAt)}</span>
+                  </div>
+                  <a
+                    href={d.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium underline-offset-2 hover:underline"
+                  >
+                    {d.title}
+                  </a>
                 </div>
-                <a
-                  href={d.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium underline-offset-2 hover:underline"
+                <button
+                  type="button"
+                  onClick={() => handleDismissDisclosure(d.id)}
+                  aria-label="この開示を非表示にする"
+                  title="この開示を非表示にする"
+                  className="shrink-0 rounded-full px-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                 >
-                  {d.title}
-                </a>
+                  ×
+                </button>
               </li>
             ))}
           </ul>

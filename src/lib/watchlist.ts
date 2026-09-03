@@ -15,6 +15,7 @@ export interface WatchedCompany {
 
 const COMPANIES_KEY = "ir-watch:companies";
 const LAST_CHECKED_KEY = "ir-watch:last-checked-at";
+const DISMISSED_KEY = "ir-watch:dismissed-ids";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -99,4 +100,48 @@ export function setLastCheckedAt(date: Date, storage?: StorageLike): void {
   const store = getStorage(storage);
   if (!store) return;
   store.setItem(LAST_CHECKED_KEY, date.toISOString());
+}
+
+function readDismissedIds(storage?: StorageLike): string[] {
+  const store = getStorage(storage);
+  if (!store) return [];
+  const raw = store.getItem(DISMISSED_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedIds(ids: string[], storage?: StorageLike): void {
+  const store = getStorage(storage);
+  if (!store) return;
+  store.setItem(DISMISSED_KEY, JSON.stringify(ids));
+}
+
+/** Disclosure ids the visitor has dismissed ("not needed") — hidden from their feed. */
+export function getDismissedIds(storage?: StorageLike): string[] {
+  return readDismissedIds(storage);
+}
+
+export function dismissDisclosure(id: string, storage?: StorageLike): void {
+  const ids = readDismissedIds(storage);
+  if (ids.includes(id)) return;
+  writeDismissedIds([...ids, id], storage);
+}
+
+/**
+ * Drops dismissed ids that no longer appear in the current snapshot, so
+ * this list doesn't grow forever as old disclosures roll out of the
+ * (rolling 7-day) snapshot window.
+ */
+export function pruneDismissedIds(validIds: Iterable<string>, storage?: StorageLike): void {
+  const valid = new Set(validIds);
+  const ids = readDismissedIds(storage);
+  const pruned = ids.filter((id) => valid.has(id));
+  if (pruned.length !== ids.length) {
+    writeDismissedIds(pruned, storage);
+  }
 }

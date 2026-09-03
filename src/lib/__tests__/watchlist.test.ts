@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   addWatchedCompany,
+  dismissDisclosure,
   DuplicateCompanyError,
+  getDismissedIds,
   getLastCheckedAt,
   listWatchedCompanies,
+  pruneDismissedIds,
   removeWatchedCompany,
   setLastCheckedAt,
   type StorageLike,
@@ -63,5 +66,23 @@ describe("watchlist storage", () => {
     const storage = createMemoryStorage();
     storage.setItem("ir-watch:companies", "not json");
     expect(listWatchedCompanies(storage)).toEqual([]);
+  });
+
+  it("tracks dismissed disclosure ids, without duplicating repeats", () => {
+    const storage = createMemoryStorage();
+    expect(getDismissedIds(storage)).toEqual([]);
+    dismissDisclosure("a", storage);
+    dismissDisclosure("b", storage);
+    dismissDisclosure("a", storage);
+    expect(getDismissedIds(storage)).toEqual(["a", "b"]);
+  });
+
+  it("prunes dismissed ids that no longer appear in the current snapshot", () => {
+    const storage = createMemoryStorage();
+    dismissDisclosure("a", storage);
+    dismissDisclosure("b", storage);
+    dismissDisclosure("c", storage);
+    pruneDismissedIds(["b", "c", "d"], storage);
+    expect(getDismissedIds(storage)).toEqual(["b", "c"]);
   });
 });
