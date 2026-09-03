@@ -17,7 +17,9 @@ import { fetchDisclosuresSnapshot, filterByCodes, type Disclosure } from "@/lib/
 
 type DisclosureItem = Disclosure & { isNew: boolean };
 
-const CODE_PATTERN = /^[0-9]{4}$/;
+// TSE tickers are normally 4 digits, but JPX's newer alphanumeric codes
+// (e.g. "130A") mix in letters too — accept either, case-insensitively.
+const CODE_PATTERN = /^[0-9A-Za-z]{4}$/;
 
 function formatDate(iso: string): string {
   try {
@@ -94,11 +96,11 @@ export default function Dashboard() {
     e.preventDefault();
     setFormError(null);
 
-    const code = codeInput.trim();
+    const code = codeInput.trim().toUpperCase();
     const name = nameInput.trim();
 
     if (!CODE_PATTERN.test(code)) {
-      setFormError("証券コードは4桁の数字で入力してください");
+      setFormError("証券コードは4桁の英数字で入力してください");
       return;
     }
     if (!name) {
@@ -152,9 +154,8 @@ export default function Dashboard() {
             <input
               id="code"
               value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value)}
-              placeholder="7203"
-              inputMode="numeric"
+              onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+              placeholder="7203 / 130A"
               maxLength={4}
               className="w-28 rounded-md border border-zinc-300 bg-transparent px-3 py-1.5 text-sm dark:border-zinc-700"
             />
