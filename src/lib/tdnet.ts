@@ -9,10 +9,11 @@
  * verified against a live call from this environment (outbound network here
  * is restricted to an allowlist that does not include this host).
  *
- * This app is a static export with no server, so these requests are made
- * directly from the visitor's browser. That only works if the mirror sends
- * CORS headers permitting cross-origin reads; this too could not be
- * verified from this environment and should be checked once deployed.
+ * The functions below that hit this API directly (fetchDisclosuresForDate,
+ * fetchRecentDisclosures) only run server-side, from scripts/fetch-tdnet.ts
+ * in CI — confirmed against the deployed site that the mirror does not send
+ * CORS headers, so a direct browser fetch is blocked. The browser instead
+ * reads the pre-fetched snapshot via fetchDisclosuresSnapshot() below.
  */
 
 export interface Disclosure {
@@ -162,6 +163,31 @@ export async function fetchRecentDisclosures(
   return Array.from(byId.values()).sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
+}
+
+export interface DisclosuresSnapshot {
+  generatedAt: string;
+  days: number;
+  disclosures: Disclosure[];
+}
+
+/**
+ * Loads the pre-fetched, same-origin snapshot at /tdnet-disclosures.json
+ * (built by scripts/fetch-tdnet.ts). The browser can't call the TDnet
+ * mirror API directly — it doesn't send CORS headers — so this is the
+ * only disclosure data source the deployed site can actually read.
+ */
+export async function fetchDisclosuresSnapshot(
+  fetchImpl: typeof fetch = fetch
+): Promise<DisclosuresSnapshot> {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const res = await fetchImpl(`${basePath}/tdnet-disclosures.json`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to load TDnet snapshot: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as DisclosuresSnapshot;
 }
 
 export function normalizeCode(code: string): string {

@@ -10,7 +10,7 @@ import {
   setLastCheckedAt,
   type WatchedCompany,
 } from "@/lib/watchlist";
-import { fetchRecentDisclosures, filterByCodes, type Disclosure } from "@/lib/tdnet";
+import { fetchDisclosuresSnapshot, filterByCodes, type Disclosure } from "@/lib/tdnet";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
 
@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false);
   const [companies, setCompanies] = useState<WatchedCompany[]>([]);
   const [disclosures, setDisclosures] = useState<DisclosureItem[]>([]);
+  const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
   const [loadingDisclosures, setLoadingDisclosures] = useState(false);
   const [disclosuresError, setDisclosuresError] = useState<string | null>(null);
 
@@ -47,17 +48,18 @@ export default function Dashboard() {
     setDisclosuresError(null);
     try {
       const previousCheckedAt = getLastCheckedAt();
-      const all = await fetchRecentDisclosures(7);
-      const filtered = filterByCodes(all, watchList.map((c) => c.code));
+      const snapshot = await fetchDisclosuresSnapshot();
+      const filtered = filterByCodes(snapshot.disclosures, watchList.map((c) => c.code));
       const withFlags = filtered.map((d) => ({
         ...d,
         isNew: previousCheckedAt ? new Date(d.publishedAt) > previousCheckedAt : true,
       }));
       setDisclosures(withFlags);
+      setSnapshotGeneratedAt(snapshot.generatedAt);
       setLastCheckedAt(new Date());
     } catch {
       setDisclosuresError(
-        "開示情報の取得に失敗しました。ネットワーク接続を確認するか、しばらくしてから再度お試しください。"
+        "開示情報の取得に失敗しました。しばらくしてから再度お試しください。"
       );
     } finally {
       setLoadingDisclosures(false);
@@ -203,6 +205,12 @@ export default function Dashboard() {
             {loadingDisclosures ? "更新中..." : "更新"}
           </button>
         </div>
+
+        {snapshotGeneratedAt && (
+          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+            データ更新: {formatDate(snapshotGeneratedAt)}時点
+          </p>
+        )}
 
         {disclosuresError && (
           <p className="mt-3 text-sm text-red-600 dark:text-red-400">{disclosuresError}</p>

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   fetchDisclosuresForDate,
+  fetchDisclosuresSnapshot,
   fetchRecentDisclosures,
   filterByCodes,
   normalizeCode,
@@ -219,5 +220,38 @@ describe("filterByCodes", () => {
 
     expect(filterByCodes(disclosures, ["7203"])).toEqual([disclosures[0]]);
     expect(filterByCodes(disclosures, ["9999"])).toEqual([]);
+  });
+});
+
+describe("fetchDisclosuresSnapshot", () => {
+  it("loads the pre-fetched same-origin snapshot", async () => {
+    const snapshot = {
+      generatedAt: "2026-09-03T12:00:00Z",
+      days: 7,
+      disclosures: [
+        {
+          id: "1",
+          code: "7203",
+          companyName: "トヨタ自動車",
+          title: "t",
+          url: "u",
+          publishedAt: "2026-09-03T09:00:00Z",
+        },
+      ],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(snapshot));
+
+    const result = await fetchDisclosuresSnapshot(fetchImpl);
+
+    expect(result).toEqual(snapshot);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("/tdnet-disclosures.json"),
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("throws when the snapshot can't be loaded (e.g. not built yet)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, 404));
+    await expect(fetchDisclosuresSnapshot(fetchImpl)).rejects.toThrow();
   });
 });
