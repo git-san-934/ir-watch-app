@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   addWatchedCompany,
   dismissDisclosure,
@@ -20,6 +20,11 @@ type DisclosureItem = Disclosure & { isNew: boolean };
 // TSE tickers are normally 4 digits, but JPX's newer alphanumeric codes
 // (e.g. "130A") mix in letters too — accept either, case-insensitively.
 const CODE_PATTERN = /^[0-9A-Za-z]{4}$/;
+
+// The server-side snapshot refreshes every 15 min (see
+// .github/workflows/deploy.yml); poll a bit more often than that so an
+// open tab picks up a new snapshot soon after it's published.
+const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function formatDate(iso: string): string {
   try {
@@ -43,6 +48,13 @@ export default function Dashboard() {
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Read by the auto-refresh effect below, which shouldn't need to
+  // restart its interval/listener every time the watchlist changes.
+  const companiesRef = useRef(companies);
+  useEffect(() => {
+    companiesRef.current = companies;
+  }, [companies]);
 
   const loadDisclosures = useCallback(async (watchList: WatchedCompany[]) => {
     if (watchList.length === 0) {
@@ -96,6 +108,32 @@ export default function Dashboard() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the feed in sync with the server-side snapshot while the tab is
+  // open: poll periodically, and also refetch immediately whenever the
+  // visitor switches back to this tab (covers the case where they were
+  // away longer than the poll interval).
+  useEffect(() => {
+    function refreshIfWatchingAnything() {
+      if (companiesRef.current.length > 0) {
+        void loadDisclosures(companiesRef.current);
+      }
+    }
+
+    const intervalId = setInterval(refreshIfWatchingAnything, AUTO_REFRESH_INTERVAL_MS);
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshIfWatchingAnything();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadDisclosures]);
 
   function handleAddCompany(e: React.FormEvent) {
     e.preventDefault();
