@@ -3,14 +3,27 @@ import {
   addWatchedCompany,
   dismissDisclosure,
   DuplicateCompanyError,
+  getArchivedDisclosures,
   getDismissedIds,
-  getLastCheckedAt,
   listWatchedCompanies,
+  mergeArchivedDisclosures,
   pruneDismissedIds,
   removeWatchedCompany,
-  setLastCheckedAt,
   type StorageLike,
 } from "@/lib/watchlist";
+import type { Disclosure } from "@/lib/tdnet";
+
+function makeDisclosure(id: string, overrides: Partial<Disclosure> = {}): Disclosure {
+  return {
+    id,
+    code: "7203",
+    companyName: "トヨタ自動車",
+    title: `開示 ${id}`,
+    url: `https://example.com/${id}.pdf`,
+    publishedAt: "2026-09-01T00:00:00Z",
+    ...overrides,
+  };
+}
 
 function createMemoryStorage(): StorageLike {
   const data = new Map<string, string>();
@@ -54,14 +67,6 @@ describe("watchlist storage", () => {
     expect(listWatchedCompanies(storage)).toHaveLength(0);
   });
 
-  it("tracks the last-checked timestamp", () => {
-    const storage = createMemoryStorage();
-    expect(getLastCheckedAt(storage)).toBeNull();
-    const now = new Date("2026-09-01T00:00:00Z");
-    setLastCheckedAt(now, storage);
-    expect(getLastCheckedAt(storage)).toEqual(now);
-  });
-
   it("returns an empty list instead of throwing on corrupt stored JSON", () => {
     const storage = createMemoryStorage();
     storage.setItem("ir-watch:companies", "not json");
@@ -84,5 +89,23 @@ describe("watchlist storage", () => {
     dismissDisclosure("c", storage);
     pruneDismissedIds(["b", "c", "d"], storage);
     expect(getDismissedIds(storage)).toEqual(["b", "c"]);
+  });
+
+  it("archives disclosures permanently, merging in only unseen ones", () => {
+    const storage = createMemoryStorage();
+    expect(getArchivedDisclosures(storage)).toEqual([]);
+
+    const first = mergeArchivedDisclosures([makeDisclosure("a"), makeDisclosure("b")], storage);
+    expect(first.map((d) => d.id)).toEqual(["a", "b"]);
+    expect(getArchivedDisclosures(storage)).toHaveLength(2);
+
+    // Re-merging the same ids plus one new one only reports the new one,
+    // and the archive keeps everything (nothing rolls off).
+    const second = mergeArchivedDisclosures(
+      [makeDisclosure("a"), makeDisclosure("b"), makeDisclosure("c")],
+      storage
+    );
+    expect(second.map((d) => d.id)).toEqual(["c"]);
+    expect(getArchivedDisclosures(storage).map((d) => d.id)).toEqual(["a", "b", "c"]);
   });
 });

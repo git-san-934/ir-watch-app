@@ -1,10 +1,13 @@
 /**
  * Client-side watchlist storage. This app is a static export (GitHub
- * Pages) with no server, so the watch list and last-checked timestamp
- * live entirely in the visitor's own browser (localStorage) — nothing
- * is sent anywhere, which is also what keeps one visitor's list private
- * from anyone else without needing accounts or a login.
+ * Pages) with no server, so the watch list and every disclosure ever
+ * matched against it live entirely in the visitor's own browser
+ * (localStorage) — nothing is sent anywhere, which is also what keeps
+ * one visitor's data private from anyone else without needing accounts
+ * or a login.
  */
+
+import type { Disclosure } from "./tdnet";
 
 export interface WatchedCompany {
   id: string;
@@ -14,7 +17,7 @@ export interface WatchedCompany {
 }
 
 const COMPANIES_KEY = "ir-watch:companies";
-const LAST_CHECKED_KEY = "ir-watch:last-checked-at";
+const ARCHIVE_KEY = "ir-watch:archived-disclosures";
 const DISMISSED_KEY = "ir-watch:dismissed-ids";
 
 export interface StorageLike {
@@ -89,17 +92,47 @@ export function removeWatchedCompany(id: string, storage?: StorageLike): boolean
   return true;
 }
 
-export function getLastCheckedAt(storage?: StorageLike): Date | null {
+function readArchive(storage?: StorageLike): Disclosure[] {
   const store = getStorage(storage);
-  if (!store) return null;
-  const raw = store.getItem(LAST_CHECKED_KEY);
-  return raw ? new Date(raw) : null;
+  if (!store) return [];
+  const raw = store.getItem(ARCHIVE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
-export function setLastCheckedAt(date: Date, storage?: StorageLike): void {
+function writeArchive(disclosures: Disclosure[], storage?: StorageLike): void {
   const store = getStorage(storage);
   if (!store) return;
-  store.setItem(LAST_CHECKED_KEY, date.toISOString());
+  store.setItem(ARCHIVE_KEY, JSON.stringify(disclosures));
+}
+
+/** Every disclosure ever merged in, across all companies ever watched. */
+export function getArchivedDisclosures(storage?: StorageLike): Disclosure[] {
+  return readArchive(storage);
+}
+
+/**
+ * Adds any of `candidates` not already in the archive (matched by id) —
+ * everything merged in stays permanently (until dismissed), independent
+ * of how long the server-side snapshot's rolling window keeps it around.
+ * Returns just the newly-added ones, e.g. to flag them "NEW" in the UI.
+ */
+export function mergeArchivedDisclosures(
+  candidates: Disclosure[],
+  storage?: StorageLike
+): Disclosure[] {
+  const archive = readArchive(storage);
+  const knownIds = new Set(archive.map((d) => d.id));
+  const added = candidates.filter((d) => !knownIds.has(d.id));
+  if (added.length > 0) {
+    writeArchive([...archive, ...added], storage);
+  }
+  return added;
 }
 
 function readDismissedIds(storage?: StorageLike): string[] {
@@ -133,9 +166,11 @@ export function dismissDisclosure(id: string, storage?: StorageLike): void {
 }
 
 /**
- * Drops dismissed ids that no longer appear in the current snapshot, so
- * this list doesn't grow forever as old disclosures roll out of the
- * (rolling 7-day) snapshot window.
+ * Drops dismissed ids that no longer appear in the (permanent) archive —
+ * e.g. because the disclosure's company was removed from the watchlist
+ * before it was ever archived — so this list doesn't grow forever for
+ * no reason. Pass the current archive's ids, not the server snapshot's:
+ * the archive is what persists, the snapshot is just a rolling window.
  */
 export function pruneDismissedIds(validIds: Iterable<string>, storage?: StorageLike): void {
   const valid = new Set(validIds);

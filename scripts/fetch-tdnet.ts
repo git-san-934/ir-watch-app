@@ -10,12 +10,21 @@
  *
  * Run via `npx tsx scripts/fetch-tdnet.ts`. See .github/workflows/deploy.yml
  * for how this fits into the build.
+ *
+ * This window is just a safety margin, not the retention policy: the
+ * browser (src/lib/watchlist.ts) merges every matching disclosure it
+ * sees into a permanent per-visitor archive in localStorage, so once
+ * something has been fetched at least once it's kept until dismissed
+ * regardless of DAYS. DAYS only matters for a visitor who hasn't opened
+ * the site in longer than this many days — anything published entirely
+ * within that gap is missed, since there's no server keeping a longer
+ * history. 30 days balances that risk against build time / file size.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fetchRecentDisclosures } from "../src/lib/tdnet";
 
-const DAYS = 7;
+const DAYS = 30;
 
 async function main() {
   const disclosures = await fetchRecentDisclosures(DAYS);

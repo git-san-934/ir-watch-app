@@ -5,12 +5,12 @@ import {
   addWatchedCompany,
   dismissDisclosure,
   DuplicateCompanyError,
+  getArchivedDisclosures,
   getDismissedIds,
-  getLastCheckedAt,
   listWatchedCompanies,
+  mergeArchivedDisclosures,
   pruneDismissedIds,
   removeWatchedCompany,
-  setLastCheckedAt,
   type WatchedCompany,
 } from "@/lib/watchlist";
 import { fetchDisclosuresSnapshot, filterByCodes, type Disclosure } from "@/lib/tdnet";
@@ -52,22 +52,27 @@ export default function Dashboard() {
     setLoadingDisclosures(true);
     setDisclosuresError(null);
     try {
-      const previousCheckedAt = getLastCheckedAt();
+      const codes = watchList.map((c) => c.code);
       const snapshot = await fetchDisclosuresSnapshot();
-      pruneDismissedIds(snapshot.disclosures.map((d) => d.id));
+
+      // Merge only the ones not already archived — everything merged in
+      // stays permanently (until dismissed), regardless of how long the
+      // server-side snapshot itself keeps a given disclosure around.
+      const candidates = filterByCodes(snapshot.disclosures, codes);
+      const added = mergeArchivedDisclosures(candidates);
+      const addedIds = new Set(added.map((d) => d.id));
+
+      const archive = getArchivedDisclosures();
+      pruneDismissedIds(archive.map((d) => d.id));
       const dismissed = new Set(getDismissedIds());
-      const filtered = filterByCodes(snapshot.disclosures, watchList.map((c) => c.code)).filter(
-        (d) => !dismissed.has(d.id)
-      );
-      const withFlags = filtered
-        .map((d) => ({
-          ...d,
-          isNew: previousCheckedAt ? new Date(d.publishedAt) > previousCheckedAt : true,
-        }))
+
+      const visible = filterByCodes(archive, codes)
+        .filter((d) => !dismissed.has(d.id))
+        .map((d) => ({ ...d, isNew: addedIds.has(d.id) }))
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      setDisclosures(withFlags);
+
+      setDisclosures(visible);
       setSnapshotGeneratedAt(snapshot.generatedAt);
-      setLastCheckedAt(new Date());
     } catch {
       setDisclosuresError(
         "開示情報の取得に失敗しました。しばらくしてから再度お試しください。"
@@ -223,7 +228,7 @@ export default function Dashboard() {
 
         {snapshotGeneratedAt && (
           <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            データ更新: {formatDate(snapshotGeneratedAt)}時点
+            データ更新: {formatDate(snapshotGeneratedAt)}時点・一度表示された開示情報は削除するまで残ります
           </p>
         )}
 
@@ -237,7 +242,7 @@ export default function Dashboard() {
           </p>
         ) : !loadingDisclosures && disclosures.length === 0 && !disclosuresError ? (
           <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-            直近の開示情報は見つかりませんでした。
+            登録銘柄の開示情報はまだありません。
           </p>
         ) : (
           <ul className="mt-4 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
