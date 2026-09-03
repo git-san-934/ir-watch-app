@@ -9,7 +9,7 @@ on:
     # Refresh the TDnet disclosure snapshot periodically. TDnet itself has
     # no public CORS-enabled API, so the browser can't fetch it directly —
     # this is what keeps the deployed site's data from going stale.
-    - cron: "*/30 * * * 1-5"
+    - cron: "*/15 * * * 1-5"
 
 permissions:
   contents: read

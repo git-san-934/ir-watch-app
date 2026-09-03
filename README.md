@@ -23,7 +23,7 @@ GitHub Pages でホストする静的サイトです([https://git-san-934.github
 
 - Next.js (App Router) + TypeScript, `output: "export"` による静的書き出し
 - Tailwind CSS
-- 監視銘柄・最終確認時刻は `localStorage` に保存(サーバー・DBは持たない)
+- 監視銘柄・開示情報の記録・非表示リストは `localStorage` に保存(サーバー・DBは持たない)
 - TDnet データ取得元: [Yanoshin TDnet API](https://webapi.yanoshin.jp/) (TDnet 本体には公開 API がないため、コミュニティ提供の JSON ミラーを利用)
 
 ### TDnet データの取得方法(CORS 制約への対応)
@@ -34,7 +34,7 @@ GitHub Pages でホストする静的サイトです([https://git-san-934.github
 2. `next build` でこのファイルが静的サイトに同梱される
 3. ブラウザは同一オリジンの `tdnet-disclosures.json` を読み込み、登録銘柄でフィルタする(`src/lib/tdnet.ts` の `fetchDisclosuresSnapshot`)
 
-そのため開示情報は完全リアルタイムではなく、`.github/workflows/deploy.yml` のスケジュール実行(平日30分おき)時点のスナップショットになります。取得元 API やスケジュール頻度を変更したい場合は `scripts/fetch-tdnet.ts` と `deploy.yml` の `schedule.cron` を編集してください。
+そのため開示情報は完全リアルタイムではなく、`.github/workflows/deploy.yml` のスケジュール実行(平日15分おき)時点のスナップショットになります。取得元 API やスケジュール頻度を変更したい場合は `scripts/fetch-tdnet.ts` と `deploy.yml` の `schedule.cron` を編集してください。
 
 ## セットアップ
 
@@ -61,7 +61,7 @@ npm run start    # ./out を http-server でプレビュー
 `.github/workflows/deploy.yml` は次のタイミングで実行されます:
 
 - 開発ブランチ(`claude/continue-development-xp5vmg`)への push
-- 平日30分おきのスケジュール実行(TDnet スナップショットの更新用)
+- 平日15分おきのスケジュール実行(TDnet スナップショットの更新用)
 - Actions タブからの手動実行(workflow_dispatch)
 
 毎回 `scripts/fetch-tdnet.ts` で最新の開示情報を取得し直してから `GITHUB_PAGES=true npm run build` でビルドした `./out`(basePath: `/ir-watch-app`)を GitHub Pages に公開します。TDnet 取得に失敗した場合はその回のデプロイ自体が失敗し、直前の正常なデプロイがそのまま公開され続けます。
