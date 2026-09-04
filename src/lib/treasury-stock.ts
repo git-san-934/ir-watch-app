@@ -121,6 +121,16 @@ export async function buildTreasuryStockSummary(
   let fetchesRemaining = maxTotalFetches;
   const rows: TreasuryStockSummaryRow[] = [];
 
+  // One-off debugging aid: when DEBUG_TREASURY_PDF_TEXT=true (set via the
+  // deploy.yml workflow_dispatch "debug_pdf" input), print a sample of
+  // each PDF's extracted text so parseBuybackPdfText's label patterns can
+  // be tuned against what TDnet filings actually say — this couldn't be
+  // observed from the sandbox this code was originally written in.
+  const debugPdfText = process.env.DEBUG_TREASURY_PDF_TEXT === "true";
+  let debugSamplesLogged = 0;
+  const DEBUG_SAMPLE_LIMIT = 8;
+  const DEBUG_SAMPLE_CHARS = 4000;
+
   for (const [code, companyDisclosures] of byCompany) {
     if (fetchesRemaining <= 0) break;
 
@@ -145,6 +155,18 @@ export async function buildTreasuryStockSummary(
         const buffer = await res.arrayBuffer();
         const text = await extractPdfText(buffer);
         const parsed = parseBuybackPdfText(text);
+
+        if (debugPdfText && debugSamplesLogged < DEBUG_SAMPLE_LIMIT) {
+          debugSamplesLogged += 1;
+          console.log(
+            `\n===== DEBUG PDF TEXT SAMPLE ${debugSamplesLogged}/${DEBUG_SAMPLE_LIMIT} =====\n` +
+              `code=${code} title=${JSON.stringify(disclosure.title)} url=${disclosure.url}\n` +
+              `parsed=${JSON.stringify(parsed)}\n` +
+              `--- text (first ${DEBUG_SAMPLE_CHARS} chars) ---\n` +
+              `${text.slice(0, DEBUG_SAMPLE_CHARS)}\n` +
+              `===== END SAMPLE =====\n`
+          );
+        }
 
         totalPlannedAmountYen ??= parsed.totalPlannedAmountYen;
         cumulativeAmountYen ??= parsed.cumulativeAmountYen;

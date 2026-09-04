@@ -5,6 +5,11 @@ on:
     branches:
       - claude/continue-development-xp5vmg
   workflow_dispatch:
+    inputs:
+      debug_pdf:
+        description: "Log a sample of extracted treasury-stock PDF text (for tuning parseBuybackPdfText)"
+        type: boolean
+        default: false
   schedule:
     # Refresh the TDnet disclosure snapshot periodically. TDnet itself has
     # no public CORS-enabled API, so the browser can't fetch it directly —
@@ -34,6 +39,8 @@ jobs:
       - run: npm run lint
       - name: Fetch latest TDnet disclosures
         run: npx tsx scripts/fetch-tdnet.ts
+        env:
+          DEBUG_TREASURY_PDF_TEXT: ${{ inputs.debug_pdf && 'true' || 'false' }}
       - name: Build static export
         run: npm run build
         env:
