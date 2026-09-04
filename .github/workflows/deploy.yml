@@ -22,7 +22,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # push/schedule share one group so only the latest matters for keeping
+  # the deployed snapshot fresh — an older in-flight run there is safe to
+  # cancel. workflow_dispatch (manual debug_pdf runs) gets a group unique
+  # to its own run_id instead, so a scheduled run firing mid-debug-run
+  # can't cancel it (this repeatedly cancelled manual debug runs before).
+  group: pages-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'pages' }}
   cancel-in-progress: true
 
 jobs:
