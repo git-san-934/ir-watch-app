@@ -1,7 +1,10 @@
+import { zipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 import {
+  fetchDocumentCsvZip,
   fetchEdinetFilingsSnapshot,
   fetchFilingsForDate,
+  fetchFinancialsForFiling,
   fetchRecentFilings,
   filterFilingsByCodes,
   normalizeSecCode,
@@ -169,6 +172,85 @@ describe("fetchRecentFilings", () => {
   it("throws if every day's request fails, instead of silently returning empty", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("network down"));
     await expect(fetchRecentFilings(3, { apiKey: "key", fetchImpl })).rejects.toThrow();
+  });
+});
+
+describe("fetchDocumentCsvZip", () => {
+  it("downloads and returns the raw zip bytes", async () => {
+    const zipBytes = zipSync({ "sample.csv": new Uint8Array([1, 2, 3]) });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(zipBytes, { status: 200 })
+    );
+
+    const result = await fetchDocumentCsvZip("S100AAAA", { apiKey: "key", fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("/documents/S100AAAA?type=5"),
+      expect.anything()
+    );
+    expect(new Uint8Array(result)).toEqual(zipBytes);
+  });
+
+  it("throws when no API key is available", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      fetchDocumentCsvZip("S100AAAA", { apiKey: undefined, fetchImpl })
+    ).rejects.toThrow(/EDINET_API_KEY/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("throws on a non-ok HTTP response", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response("", { status: 404 }));
+    await expect(
+      fetchDocumentCsvZip("S100AAAA", { apiKey: "key", fetchImpl })
+    ).rejects.toThrow();
+  });
+});
+
+describe("fetchFinancialsForFiling", () => {
+  it("downloads and parses financial highlights from the CSV package", async () => {
+    const header = [
+      "要素ID",
+      "項目名",
+      "コンテキストID",
+      "相対年度",
+      "連結・個別",
+      "期間・時点",
+      "ユニットID",
+      "単位",
+      "値",
+    ];
+    const row = [
+      "jpcrp_cor:NetSalesSummaryOfBusinessResults",
+      "売上高",
+      "CurrentYearDuration",
+      "当期",
+      "連結",
+      "期間",
+      "unit1",
+      "JPY",
+      "500000",
+    ];
+    const quote = (fields: string[]) => fields.map((f) => `"${f}"`).join("\t");
+    const csvText = [quote(header), quote(row)].join("\r\n");
+    const csvBytes = new Uint8Array(Buffer.from(csvText, "utf16le"));
+    const zipBytes = zipSync({ "sample.csv": csvBytes });
+
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(zipBytes, { status: 200 }));
+    const result = await fetchFinancialsForFiling("S100AAAA", { apiKey: "key", fetchImpl });
+
+    expect(result).toEqual([
+      {
+        periodLabel: "当期",
+        consolidated: true,
+        netSales: 500000,
+        operatingIncome: null,
+        ordinaryIncome: null,
+        profit: null,
+        basicEarningsPerShare: null,
+        totalAssets: null,
+        netAssets: null,
+      },
+    ]);
   });
 });
 

@@ -22,13 +22,19 @@
  * this host — so parsing here is defensive: unrecognized/incomplete
  * entries are skipped rather than throwing.
  *
- * This phase only ingests filing *metadata* (who filed what, for which
- * period, when) — not the financial figures inside each filing. Turning
- * a docID into actual numbers means downloading and parsing its XBRL/CSV
- * package, which is a separate, larger piece of work left for later.
+ * Filing metadata (who filed what, for which period, when) is fetched
+ * eagerly for every matching filer (see fetchRecentFilings). The
+ * financial figures inside each filing are a separate, heavier fetch —
+ * downloading and unzipping a CSV package per document (see
+ * fetchFinancialsForFiling / edinetFinancials.ts) — so scripts/fetch-
+ * edinet.ts only does that for recently-submitted filings, not the full
+ * metadata window; see that script for why.
  */
 
 import { normalizeCode } from "./tdnet";
+import { extractFinancialsFromZip, type FinancialPeriod } from "./edinetFinancials";
+
+export type { FinancialPeriod } from "./edinetFinancials";
 
 export interface EdinetFiling {
   docId: string;
@@ -42,6 +48,13 @@ export interface EdinetFiling {
   periodStart: string | null;
   periodEnd: string | null;
   submittedAt: string;
+  /**
+   * Financial highlights extracted from the filing's CSV package, if
+   * scripts/fetch-edinet.ts attempted and succeeded at that for this
+   * filing (only tried for recent filings — see that script). Absent
+   * otherwise; never an empty array.
+   */
+  financials?: FinancialPeriod[];
 }
 
 const DEFAULT_BASE_URL = "https://api.edinet-fsa.go.jp/api/v2";
@@ -166,6 +179,44 @@ export async function fetchFilingsForDate(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Downloads an EDINET filing's CSV package (書類取得API type=5) as raw bytes. */
+export async function fetchDocumentCsvZip(
+  docId: string,
+  options: FetchEdinetOptions = {}
+): Promise<Uint8Array> {
+  const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const apiKey = options.apiKey ?? process.env.EDINET_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("EDINET_API_KEY is required (EDINET API v2 Subscription-Key)");
+  }
+
+  const url = `${baseUrl}/documents/${docId}?type=5&Subscription-Key=${encodeURIComponent(apiKey)}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`EDINET document download failed: ${res.status} ${res.statusText}`);
+    }
+    return new Uint8Array(await res.arrayBuffer());
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Downloads and parses one filing's financial highlights. See edinetFinancials.ts. */
+export async function fetchFinancialsForFiling(
+  docId: string,
+  options: FetchEdinetOptions = {}
+): Promise<FinancialPeriod[]> {
+  const zipBytes = await fetchDocumentCsvZip(docId, options);
+  return extractFinancialsFromZip(zipBytes);
 }
 
 export async function fetchRecentFilings(

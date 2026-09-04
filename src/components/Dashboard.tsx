@@ -45,6 +45,11 @@ function formatDate(iso: string): string {
   }
 }
 
+function formatYen(value: number | null): string {
+  if (value === null) return "—";
+  return value.toLocaleString("ja-JP");
+}
+
 export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false);
   const [companies, setCompanies] = useState<WatchedCompany[]>([]);
@@ -390,7 +395,7 @@ export default function Dashboard() {
         </div>
 
         <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-          EDINET(金融庁)に提出された書類のメタデータ一覧です。財務数値の抽出・分析はまだ未実装です。
+          EDINET(金融庁)に提出された書類の一覧です。提出から数日以内のものは主要な経営指標(売上高等)も表示されます。分析機能はまだ未実装です。
         </p>
 
         {filingsGeneratedAt && (
@@ -439,6 +444,36 @@ export default function Dashboard() {
                 </div>
                 {f.docDescription && (
                   <p className="text-sm font-medium">{f.docDescription}</p>
+                )}
+                {f.financials && f.financials.length > 0 && (
+                  <div className="mt-1 overflow-x-auto">
+                    <table className="text-xs">
+                      <thead>
+                        <tr className="text-zinc-400 dark:text-zinc-500">
+                          <th className="pr-3 text-left font-normal">期間</th>
+                          <th className="pr-3 text-left font-normal">区分</th>
+                          <th className="pr-3 text-right font-normal">売上高</th>
+                          <th className="pr-3 text-right font-normal">営業利益</th>
+                          <th className="pr-3 text-right font-normal">経常利益</th>
+                          <th className="pr-3 text-right font-normal">当期純利益</th>
+                          <th className="text-right font-normal">EPS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {f.financials.map((p, i) => (
+                          <tr key={i}>
+                            <td className="pr-3">{p.periodLabel}</td>
+                            <td className="pr-3">{p.consolidated ? "連結" : "個別"}</td>
+                            <td className="pr-3 text-right">{formatYen(p.netSales)}</td>
+                            <td className="pr-3 text-right">{formatYen(p.operatingIncome)}</td>
+                            <td className="pr-3 text-right">{formatYen(p.ordinaryIncome)}</td>
+                            <td className="pr-3 text-right">{formatYen(p.profit)}</td>
+                            <td className="text-right">{p.basicEarningsPerShare ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </li>
             ))}
