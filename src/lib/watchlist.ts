@@ -8,6 +8,7 @@
  */
 
 import type { Disclosure } from "./tdnet";
+import type { EdinetFiling } from "./edinet";
 
 export interface WatchedCompany {
   id: string;
@@ -19,6 +20,7 @@ export interface WatchedCompany {
 const COMPANIES_KEY = "ir-watch:companies";
 const ARCHIVE_KEY = "ir-watch:archived-disclosures";
 const DISMISSED_KEY = "ir-watch:dismissed-ids";
+const EDINET_ARCHIVE_KEY = "ir-watch:archived-edinet-filings";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -163,6 +165,49 @@ export function dismissDisclosure(id: string, storage?: StorageLike): void {
   const ids = readDismissedIds(storage);
   if (ids.includes(id)) return;
   writeDismissedIds([...ids, id], storage);
+}
+
+function readEdinetArchive(storage?: StorageLike): EdinetFiling[] {
+  const store = getStorage(storage);
+  if (!store) return [];
+  const raw = store.getItem(EDINET_ARCHIVE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeEdinetArchive(filings: EdinetFiling[], storage?: StorageLike): void {
+  const store = getStorage(storage);
+  if (!store) return;
+  store.setItem(EDINET_ARCHIVE_KEY, JSON.stringify(filings));
+}
+
+/** Every EDINET filing ever merged in, across all companies ever watched. */
+export function getArchivedFilings(storage?: StorageLike): EdinetFiling[] {
+  return readEdinetArchive(storage);
+}
+
+/**
+ * Adds any of `candidates` not already in the archive (matched by docId) —
+ * everything merged in stays permanently, independent of how long the
+ * server-side snapshot's rolling window keeps it around. Returns just the
+ * newly-added ones, e.g. to flag them "NEW" in the UI.
+ */
+export function mergeArchivedFilings(
+  candidates: EdinetFiling[],
+  storage?: StorageLike
+): EdinetFiling[] {
+  const archive = readEdinetArchive(storage);
+  const knownIds = new Set(archive.map((f) => f.docId));
+  const added = candidates.filter((f) => !knownIds.has(f.docId));
+  if (added.length > 0) {
+    writeEdinetArchive([...archive, ...added], storage);
+  }
+  return added;
 }
 
 /**

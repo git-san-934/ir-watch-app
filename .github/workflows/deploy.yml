@@ -34,6 +34,10 @@ jobs:
       - run: npm run lint
       - name: Fetch latest TDnet disclosures
         run: npx tsx scripts/fetch-tdnet.ts
+      - name: Fetch latest EDINET filings
+        run: npx tsx scripts/fetch-edinet.ts
+        env:
+          EDINET_API_KEY: ${{ secrets.EDINET_API_KEY }}
       - name: Build static export
         run: npm run build
         env:
