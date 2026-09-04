@@ -72,9 +72,30 @@ export interface ExtractPdfText {
   (buffer: ArrayBuffer): Promise<string>;
 }
 
+/**
+ * pdf-parse's underlying pdfjs-dist logs a "Warning: ..." line per
+ * console.{log,warn} call for every minor font/encoding quirk it works
+ * around — thousands of them across a batch of real-world PDFs, which
+ * drowns out anything else in the CI log (including this file's own
+ * DEBUG_TREASURY_PDF_TEXT output). None of it indicates a real failure
+ * (text extraction still succeeds), so silence it for the duration of
+ * the parse call only.
+ */
 async function defaultExtractPdfText(buffer: ArrayBuffer): Promise<string> {
-  const data = await pdfParse(Buffer.from(buffer));
-  return data.text;
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.log = () => {};
+  console.warn = () => {};
+  console.error = () => {};
+  try {
+    const data = await pdfParse(Buffer.from(buffer));
+    return data.text;
+  } finally {
+    console.log = originalLog;
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
 }
 
 export interface BuildTreasuryStockSummaryOptions {
