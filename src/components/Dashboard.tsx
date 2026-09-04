@@ -44,9 +44,12 @@ function formatDate(iso: string): string {
   }
 }
 
-function formatYen(amount: number | null): string {
+const YEN_PER_OKU = 100_000_000;
+
+function formatOkuYen(amount: number | null): string {
   if (amount === null) return "—";
-  return `${amount.toLocaleString("ja-JP")}円`;
+  const oku = amount / YEN_PER_OKU;
+  return `${oku.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}億円`;
 }
 
 function sortByPublishedAtDesc(a: Disclosure, b: Disclosure): number {
@@ -316,8 +319,8 @@ export default function Dashboard() {
               onClick={() => setActiveTab("treasury")}
               className={`rounded-full px-3 py-1 text-sm font-medium ${
                 activeTab === "treasury"
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                  ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                  : "text-red-400 hover:bg-red-50 dark:text-red-400/70 dark:hover:bg-red-950/30"
               }`}
             >
               自社株買い(全銘柄)
@@ -402,7 +405,7 @@ export default function Dashboard() {
                 自己株式取得に関する集計データはまだありません。
               </p>
             ) : (
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4 overflow-x-auto rounded-lg border border-red-100 bg-red-50/40 p-3 dark:border-red-900/40 dark:bg-red-950/10">
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead>
                     <tr className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -415,19 +418,19 @@ export default function Dashboard() {
                       <th className="pb-2 font-medium" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <tbody className="divide-y divide-red-100 dark:divide-red-900/30">
                     {treasurySummary.map((row) => (
                       <tr key={row.code}>
                         <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">{row.code}</td>
                         <td className="py-2 pr-3">{row.companyName}</td>
                         <td className="py-2 pr-3 whitespace-nowrap">
-                          {formatYen(row.totalPlannedAmountYen)}
+                          {formatOkuYen(row.totalPlannedAmountYen)}
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap">
-                          {formatYen(row.cumulativeAmountYen)}
+                          {formatOkuYen(row.cumulativeAmountYen)}
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap">
-                          {formatYen(row.lastMonthAmountYen)}
+                          {formatOkuYen(row.lastMonthAmountYen)}
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
                           {formatDate(row.latestDisclosureAt)}

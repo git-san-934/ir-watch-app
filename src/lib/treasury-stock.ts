@@ -29,8 +29,13 @@
  * once for the reporting month itself, once for the board resolution's
  * upper limit, and once for the cumulative-to-date total — with no
  * label text distinguishing them. What does distinguish them:
- *   - the upper-limit one is always suffixed with "上限" nearby
+ *   - the upper-limit one is usually suffixed with "上限" nearby
  *     ("...円（上限）" / "...円（上限とする）")
+ *   - failing that, it's often instead introduced by a heading recapping
+ *     the original board resolution, e.g. "◯年◯月◯日開催の取締役会に
+ *     おける決議内容" or "自己株式の取得に関する決議内容（過去開催
+ *     取締役会）" — the resolution's total plan amount follows shortly
+ *     after, again without "上限" directly on it
  *   - the cumulative one follows a "累計" heading, typically within a
  *     couple hundred characters
  *   - the reporting-month one is whichever is left — normally the
@@ -65,6 +70,13 @@ const UPPER_LIMIT_MARKER = /^[^0-9]{0,6}上限/;
 // and numbering (e.g. "(2026年8月31日現在)(1)取得した株式の総数…株(2)")
 // without being so wide it could pick up an unrelated later occurrence.
 const CUMULATIVE_HEADING_WINDOW = 200;
+
+// Fallback for the plan-total amount when it isn't marked "上限": a
+// heading recapping the original board resolution ("取締役会における
+// 決議内容" / "決議内容（過去開催取締役会）", in either order). Matches
+// both example phrasings seen in real filings.
+const RESOLUTION_HEADING = /取締役会.{0,20}決議(の)?内容|決議(の)?内容.{0,20}取締役会/;
+const RESOLUTION_HEADING_WINDOW = 300;
 
 interface LabeledAmount {
   value: number;
@@ -112,7 +124,7 @@ export function parseBuybackPdfText(rawText: string): ParsedBuybackFigures {
     .replace(/\s+/g, "");
 
   const amounts = findLabeledAmounts(text, AMOUNT_LABEL);
-  const totalPlanned = amounts.find((a) => a.hasUpperLimitMarker);
+  let totalPlanned = amounts.find((a) => a.hasUpperLimitMarker);
 
   const cumulativeHeadingIndex = text.indexOf("累計");
   const cumulative =
@@ -125,7 +137,23 @@ export function parseBuybackPdfText(rawText: string): ParsedBuybackFigures {
             a.index - cumulativeHeadingIndex < CUMULATIVE_HEADING_WINDOW
         );
 
-  const period = amounts.find((a) => !a.hasUpperLimitMarker && a !== cumulative);
+  if (!totalPlanned) {
+    const resolutionMatch = RESOLUTION_HEADING.exec(text);
+    if (resolutionMatch) {
+      const headingIndex = resolutionMatch.index;
+      totalPlanned = amounts.find(
+        (a) =>
+          !a.hasUpperLimitMarker &&
+          a !== cumulative &&
+          a.index > headingIndex &&
+          a.index - headingIndex < RESOLUTION_HEADING_WINDOW
+      );
+    }
+  }
+
+  const period = amounts.find(
+    (a) => !a.hasUpperLimitMarker && a !== cumulative && a !== totalPlanned
+  );
 
   return {
     totalPlannedAmountYen: totalPlanned?.value ?? null,

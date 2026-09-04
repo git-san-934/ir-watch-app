@@ -61,6 +61,28 @@ describe("parseBuybackPdfText", () => {
     });
   });
 
+  it("falls back to a board-resolution heading when the total isn't marked 上限", () => {
+    const text =
+      "当月中における自己株式の取得価額の総額　３０，０００，０００円" +
+      "過去の日付により開催された取締役会における決議内容　株式の取得価額の総額　８，０００，０００，０００円";
+    const result = parseBuybackPdfText(text);
+    expect(result.totalPlannedAmountYen).toBe(8_000_000_000);
+    expect(result.periodAmountYen).toBe(30_000_000);
+  });
+
+  it("recognizes the board-resolution heading in either phrase order", () => {
+    const text =
+      "自己株式の取得に関する決議内容(過去開催取締役会)　取得価額の総額　６，０００，０００，０００円";
+    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(6_000_000_000);
+  });
+
+  it("still prefers an 上限-marked amount over a resolution heading when both are present", () => {
+    const text =
+      "取得価額の総額　１２，０００，０００，０００円（上限）" +
+      "取締役会における決議内容　取得価額の総額　９，０００，０００，０００円";
+    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(12_000_000_000);
+  });
+
   it("returns null fields when nothing matches, instead of throwing", () => {
     const result = parseBuybackPdfText("決算短信〔日本基準〕(連結) 売上高 1,000,000,000円");
     expect(result).toEqual({
