@@ -57,6 +57,11 @@ describe("parseBuybackPdfText", () => {
     expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(6_000_000_000);
   });
 
+  it("also recognizes the 取得価格の総額 (価格) spelling some filings use instead of 価額", () => {
+    const text = "株式の取得価格の総額　25億円（上限）";
+    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(2_500_000_000);
+  });
+
   it("disambiguates all three figures when the same label appears three times in one filing", () => {
     const result = parseBuybackPdfText(REALISTIC_FILING_TEXT);
     expect(result).toEqual({

@@ -60,7 +60,10 @@ function toHalfWidthDigits(text: string): string {
   return text.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
 }
 
-const AMOUNT_LABEL = "取得価額の総額";
+// Almost every filing spells this "取得価額の総額" (価額), but some
+// write "取得価格の総額" (価格) instead — same meaning, one character
+// different, seen in a real filing (日本システム技術, code 4323).
+const AMOUNT_LABEL_PATTERN = /取得価[額格]の総額/;
 // Real filings sometimes state the amount in 百万円 (millions) or 億円
 // (hundred-millions) instead of 円 directly (e.g. "2,000百万円",
 // "60億円（上限）") — especially the board resolution's original upper
@@ -89,14 +92,13 @@ interface LabeledAmount {
   hasUpperLimitMarker: boolean;
 }
 
-/** Finds every occurrence of `label` immediately followed by a yen amount. */
-function findLabeledAmounts(text: string, label: string): LabeledAmount[] {
+/** Finds every occurrence of `labelPattern` immediately followed by a yen amount. */
+function findLabeledAmounts(text: string, labelPattern: RegExp): LabeledAmount[] {
   const results: LabeledAmount[] = [];
-  let searchFrom = 0;
-  for (;;) {
-    const labelIdx = text.indexOf(label, searchFrom);
-    if (labelIdx === -1) break;
-    searchFrom = labelIdx + label.length;
+  const label = new RegExp(labelPattern.source, "g");
+  let labelMatch: RegExpExecArray | null;
+  while ((labelMatch = label.exec(text)) !== null) {
+    const searchFrom = labelMatch.index + labelMatch[0].length;
 
     const after = text.slice(searchFrom, searchFrom + 40);
     const match = after.match(AMOUNT_AFTER_LABEL);
@@ -128,7 +130,7 @@ export function parseBuybackPdfText(rawText: string): ParsedBuybackFigures {
     .replace(/[，]/g, ",")
     .replace(/\s+/g, "");
 
-  const amounts = findLabeledAmounts(text, AMOUNT_LABEL);
+  const amounts = findLabeledAmounts(text, AMOUNT_LABEL_PATTERN);
   let totalPlanned = amounts.find((a) => a.hasUpperLimitMarker);
 
   const cumulativeHeadingIndex = text.indexOf("累計");
