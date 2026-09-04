@@ -5,10 +5,8 @@ import {
   DuplicateCompanyError,
   getArchivedDisclosures,
   getDismissedIds,
-  getTreasuryStockArchive,
   listWatchedCompanies,
   mergeArchivedDisclosures,
-  mergeTreasuryStockArchive,
   pruneDismissedIds,
   removeWatchedCompany,
   type StorageLike,
@@ -109,14 +107,5 @@ describe("watchlist storage", () => {
     );
     expect(second.map((d) => d.id)).toEqual(["c"]);
     expect(getArchivedDisclosures(storage).map((d) => d.id)).toEqual(["a", "b", "c"]);
-  });
-
-  it("keeps the treasury-stock archive independent of the watchlist archive", () => {
-    const storage = createMemoryStorage();
-    mergeArchivedDisclosures([makeDisclosure("a")], storage);
-    mergeTreasuryStockArchive([makeDisclosure("t1"), makeDisclosure("t2")], storage);
-
-    expect(getArchivedDisclosures(storage).map((d) => d.id)).toEqual(["a"]);
-    expect(getTreasuryStockArchive(storage).map((d) => d.id)).toEqual(["t1", "t2"]);
   });
 });

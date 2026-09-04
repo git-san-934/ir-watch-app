@@ -18,7 +18,6 @@ export interface WatchedCompany {
 
 const COMPANIES_KEY = "ir-watch:companies";
 const ARCHIVE_KEY = "ir-watch:archived-disclosures";
-const TREASURY_STOCK_ARCHIVE_KEY = "ir-watch:archived-disclosures:treasury-stock";
 const DISMISSED_KEY = "ir-watch:dismissed-ids";
 
 export interface StorageLike {
@@ -93,10 +92,10 @@ export function removeWatchedCompany(id: string, storage?: StorageLike): boolean
   return true;
 }
 
-function readDisclosureArchive(key: string, storage?: StorageLike): Disclosure[] {
+function readArchive(storage?: StorageLike): Disclosure[] {
   const store = getStorage(storage);
   if (!store) return [];
-  const raw = store.getItem(key);
+  const raw = store.getItem(ARCHIVE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -106,63 +105,34 @@ function readDisclosureArchive(key: string, storage?: StorageLike): Disclosure[]
   }
 }
 
-function writeDisclosureArchive(
-  key: string,
-  disclosures: Disclosure[],
-  storage?: StorageLike
-): void {
+function writeArchive(disclosures: Disclosure[], storage?: StorageLike): void {
   const store = getStorage(storage);
   if (!store) return;
-  store.setItem(key, JSON.stringify(disclosures));
-}
-
-/**
- * Adds any of `candidates` not already in the archive at `key` (matched
- * by id) — everything merged in stays permanently (until dismissed),
- * independent of how long the server-side snapshot's rolling window
- * keeps it around. Returns just the newly-added ones, e.g. to flag them
- * "NEW" in the UI.
- */
-function mergeDisclosureArchive(
-  key: string,
-  candidates: Disclosure[],
-  storage?: StorageLike
-): Disclosure[] {
-  const archive = readDisclosureArchive(key, storage);
-  const knownIds = new Set(archive.map((d) => d.id));
-  const added = candidates.filter((d) => !knownIds.has(d.id));
-  if (added.length > 0) {
-    writeDisclosureArchive(key, [...archive, ...added], storage);
-  }
-  return added;
+  store.setItem(ARCHIVE_KEY, JSON.stringify(disclosures));
 }
 
 /** Every disclosure ever merged in, across all companies ever watched. */
 export function getArchivedDisclosures(storage?: StorageLike): Disclosure[] {
-  return readDisclosureArchive(ARCHIVE_KEY, storage);
+  return readArchive(storage);
 }
 
+/**
+ * Adds any of `candidates` not already in the archive (matched by id) —
+ * everything merged in stays permanently (until dismissed), independent
+ * of how long the server-side snapshot's rolling window keeps it around.
+ * Returns just the newly-added ones, e.g. to flag them "NEW" in the UI.
+ */
 export function mergeArchivedDisclosures(
   candidates: Disclosure[],
   storage?: StorageLike
 ): Disclosure[] {
-  return mergeDisclosureArchive(ARCHIVE_KEY, candidates, storage);
-}
-
-/**
- * A second, independent archive for the "自社株買い" (treasury stock
- * buyback) feed, which spans every company — not just ones on the
- * watchlist — so it's kept separate from getArchivedDisclosures above.
- */
-export function getTreasuryStockArchive(storage?: StorageLike): Disclosure[] {
-  return readDisclosureArchive(TREASURY_STOCK_ARCHIVE_KEY, storage);
-}
-
-export function mergeTreasuryStockArchive(
-  candidates: Disclosure[],
-  storage?: StorageLike
-): Disclosure[] {
-  return mergeDisclosureArchive(TREASURY_STOCK_ARCHIVE_KEY, candidates, storage);
+  const archive = readArchive(storage);
+  const knownIds = new Set(archive.map((d) => d.id));
+  const added = candidates.filter((d) => !knownIds.has(d.id));
+  if (added.length > 0) {
+    writeArchive([...archive, ...added], storage);
+  }
+  return added;
 }
 
 function readDismissedIds(storage?: StorageLike): string[] {
@@ -196,15 +166,11 @@ export function dismissDisclosure(id: string, storage?: StorageLike): void {
 }
 
 /**
- * Drops dismissed ids that no longer appear in either (permanent)
- * archive — e.g. because the disclosure's company was removed from the
- * watchlist before it was ever archived — so this list doesn't grow
- * forever for no reason. Pass the union of both archives' ids, not the
- * server snapshot's: the archives are what persist, the snapshot is
- * just a rolling window. A dismissed id is shared across both feeds
- * (getArchivedDisclosures and getTreasuryStockArchive) — dismissing a
- * disclosure hides it everywhere, not just in the tab it was dismissed
- * from, since the same TDnet disclosure can legitimately appear in both.
+ * Drops dismissed ids that no longer appear in the (permanent) archive —
+ * e.g. because the disclosure's company was removed from the watchlist
+ * before it was ever archived — so this list doesn't grow forever for
+ * no reason. Pass the current archive's ids, not the server snapshot's:
+ * the archive is what persists, the snapshot is just a rolling window.
  */
 export function pruneDismissedIds(validIds: Iterable<string>, storage?: StorageLike): void {
   const valid = new Set(validIds);

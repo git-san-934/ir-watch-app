@@ -220,3 +220,42 @@ export function isTreasuryStockDisclosure(title: string): boolean {
 export function filterTreasuryStockDisclosures(disclosures: Disclosure[]): Disclosure[] {
   return disclosures.filter((d) => isTreasuryStockDisclosure(d.title));
 }
+
+/**
+ * One company's treasury-stock (自社株買い) buyback status, built by
+ * scripts/fetch-tdnet.ts (see src/lib/treasury-stock.ts) from parsing the
+ * PDF text of its recent buyback-related disclosures. A null field means
+ * that figure could not be found in the PDFs checked — the extraction is
+ * best-effort text parsing, not guaranteed to find every field.
+ */
+export interface TreasuryStockSummaryRow {
+  code: string;
+  companyName: string;
+  totalPlannedAmountYen: number | null;
+  cumulativeAmountYen: number | null;
+  lastMonthAmountYen: number | null;
+  latestDisclosureAt: string;
+  sourceUrl: string;
+}
+
+export interface TreasuryStockSummary {
+  generatedAt: string;
+  rows: TreasuryStockSummaryRow[];
+}
+
+/**
+ * Loads the pre-built, same-origin summary at /treasury-stock-summary.json
+ * (built by scripts/fetch-tdnet.ts alongside the disclosure snapshot).
+ */
+export async function fetchTreasuryStockSummary(
+  fetchImpl: typeof fetch = fetch
+): Promise<TreasuryStockSummary> {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const res = await fetchImpl(`${basePath}/treasury-stock-summary.json`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to load treasury-stock summary: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as TreasuryStockSummary;
+}

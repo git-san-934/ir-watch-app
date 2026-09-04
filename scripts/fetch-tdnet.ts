@@ -23,6 +23,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fetchRecentDisclosures } from "../src/lib/tdnet";
+import { buildTreasuryStockSummary } from "../src/lib/treasury-stock";
 
 const DAYS = 30;
 
@@ -31,18 +32,31 @@ async function main() {
 
   const outDir = path.join(process.cwd(), "public");
   mkdirSync(outDir, { recursive: true });
-  const outPath = path.join(outDir, "tdnet-disclosures.json");
 
+  const generatedAt = new Date().toISOString();
+
+  const disclosuresPath = path.join(outDir, "tdnet-disclosures.json");
   writeFileSync(
-    outPath,
+    disclosuresPath,
     JSON.stringify({
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       days: DAYS,
       disclosures,
     })
   );
+  console.log(
+    `Wrote ${disclosures.length} disclosures (last ${DAYS} days) to ${disclosuresPath}`
+  );
 
-  console.log(`Wrote ${disclosures.length} disclosures (last ${DAYS} days) to ${outPath}`);
+  // Best-effort: individual PDF fetch/parse failures are swallowed inside
+  // buildTreasuryStockSummary (left as null fields), so this only throws
+  // on something unexpected.
+  const treasuryRows = await buildTreasuryStockSummary(disclosures);
+  const treasuryPath = path.join(outDir, "treasury-stock-summary.json");
+  writeFileSync(treasuryPath, JSON.stringify({ generatedAt, rows: treasuryRows }));
+  console.log(
+    `Wrote treasury-stock summary for ${treasuryRows.length} companies to ${treasuryPath}`
+  );
 }
 
 main().catch((err) => {

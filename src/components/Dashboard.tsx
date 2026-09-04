@@ -7,19 +7,18 @@ import {
   DuplicateCompanyError,
   getArchivedDisclosures,
   getDismissedIds,
-  getTreasuryStockArchive,
   listWatchedCompanies,
   mergeArchivedDisclosures,
-  mergeTreasuryStockArchive,
   pruneDismissedIds,
   removeWatchedCompany,
   type WatchedCompany,
 } from "@/lib/watchlist";
 import {
   fetchDisclosuresSnapshot,
+  fetchTreasuryStockSummary,
   filterByCodes,
-  filterTreasuryStockDisclosures,
   type Disclosure,
+  type TreasuryStockSummaryRow,
 } from "@/lib/tdnet";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
@@ -45,6 +44,11 @@ function formatDate(iso: string): string {
   }
 }
 
+function formatYen(amount: number | null): string {
+  if (amount === null) return "—";
+  return `${amount.toLocaleString("ja-JP")}円`;
+}
+
 function sortByPublishedAtDesc(a: Disclosure, b: Disclosure): number {
   return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
 }
@@ -55,8 +59,13 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("watchlist");
 
   const [disclosures, setDisclosures] = useState<DisclosureItem[]>([]);
-  const [treasuryDisclosures, setTreasuryDisclosures] = useState<DisclosureItem[]>([]);
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
+
+  const [treasurySummary, setTreasurySummary] = useState<TreasuryStockSummaryRow[]>([]);
+  const [treasurySummaryGeneratedAt, setTreasurySummaryGeneratedAt] = useState<string | null>(
+    null
+  );
+
   const [loadingDisclosures, setLoadingDisclosures] = useState(false);
   const [disclosuresError, setDisclosuresError] = useState<string | null>(null);
 
@@ -76,43 +85,54 @@ export default function Dashboard() {
     setDisclosuresError(null);
     try {
       const codes = watchList.map((c) => c.code);
-      const snapshot = await fetchDisclosuresSnapshot();
 
-      // Merge only the ones not already archived — everything merged in
-      // stays permanently (until dismissed), regardless of how long the
-      // server-side snapshot itself keeps a given disclosure around.
-      // Two independent feeds share the same snapshot fetch: one scoped
-      // to the watchlist, one spanning every company for buyback news.
-      const watchCandidates = filterByCodes(snapshot.disclosures, codes);
-      const watchAdded = mergeArchivedDisclosures(watchCandidates);
-      const watchAddedIds = new Set(watchAdded.map((d) => d.id));
+      // Two independent, unrelated data sources loaded together: the
+      // per-company watchlist feed (from the raw disclosure snapshot,
+      // merged into a permanent local archive) and the treasury-stock
+      // summary table (pre-aggregated server-side across every company,
+      // see scripts/fetch-tdnet.ts / src/lib/treasury-stock.ts).
+      const [snapshotResult, treasuryResult] = await Promise.allSettled([
+        fetchDisclosuresSnapshot(),
+        fetchTreasuryStockSummary(),
+      ]);
 
-      const treasuryCandidates = filterTreasuryStockDisclosures(snapshot.disclosures);
-      const treasuryAdded = mergeTreasuryStockArchive(treasuryCandidates);
-      const treasuryAddedIds = new Set(treasuryAdded.map((d) => d.id));
+      if (snapshotResult.status === "fulfilled") {
+        const snapshot = snapshotResult.value;
+        const watchCandidates = filterByCodes(snapshot.disclosures, codes);
+        const watchAdded = mergeArchivedDisclosures(watchCandidates);
+        const watchAddedIds = new Set(watchAdded.map((d) => d.id));
 
-      const archive = getArchivedDisclosures();
-      const treasuryArchive = getTreasuryStockArchive();
-      pruneDismissedIds([...archive, ...treasuryArchive].map((d) => d.id));
-      const dismissed = new Set(getDismissedIds());
+        const archive = getArchivedDisclosures();
+        pruneDismissedIds(archive.map((d) => d.id));
+        const dismissed = new Set(getDismissedIds());
 
-      const visibleWatch = filterByCodes(archive, codes)
-        .filter((d) => !dismissed.has(d.id))
-        .map((d) => ({ ...d, isNew: watchAddedIds.has(d.id) }))
-        .sort(sortByPublishedAtDesc);
+        const visibleWatch = filterByCodes(archive, codes)
+          .filter((d) => !dismissed.has(d.id))
+          .map((d) => ({ ...d, isNew: watchAddedIds.has(d.id) }))
+          .sort(sortByPublishedAtDesc);
 
-      const visibleTreasury = treasuryArchive
-        .filter((d) => !dismissed.has(d.id))
-        .map((d) => ({ ...d, isNew: treasuryAddedIds.has(d.id) }))
-        .sort(sortByPublishedAtDesc);
+        setDisclosures(visibleWatch);
+        setSnapshotGeneratedAt(snapshot.generatedAt);
+      }
 
-      setDisclosures(visibleWatch);
-      setTreasuryDisclosures(visibleTreasury);
-      setSnapshotGeneratedAt(snapshot.generatedAt);
-    } catch {
-      setDisclosuresError(
-        "開示情報の取得に失敗しました。しばらくしてから再度お試しください。"
-      );
+      if (treasuryResult.status === "fulfilled") {
+        setTreasurySummary(treasuryResult.value.rows);
+        setTreasurySummaryGeneratedAt(treasuryResult.value.generatedAt);
+      }
+
+      if (snapshotResult.status === "rejected" && treasuryResult.status === "rejected") {
+        setDisclosuresError(
+          "開示情報の取得に失敗しました。しばらくしてから再度お試しください。"
+        );
+      } else if (snapshotResult.status === "rejected") {
+        setDisclosuresError(
+          "監視銘柄の開示情報の取得に失敗しました。しばらくしてから再度お試しください。"
+        );
+      } else if (treasuryResult.status === "rejected") {
+        setDisclosuresError(
+          "自社株買いの集計データの取得に失敗しました。しばらくしてから再度お試しください。"
+        );
+      }
     } finally {
       setLoadingDisclosures(false);
     }
@@ -126,17 +146,17 @@ export default function Dashboard() {
       const initial = listWatchedCompanies();
       setCompanies(initial);
       setHydrated(true);
-      // Always load — the treasury-stock feed spans every company and
+      // Always load — the treasury-stock summary spans every company and
       // doesn't depend on having anything registered.
       void loadDisclosures(initial);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep both feeds in sync with the server-side snapshot while the tab
-  // is open: poll periodically, and also refetch immediately whenever
-  // the visitor switches back to this tab (covers the case where they
-  // were away longer than the poll interval).
+  // Keep both feeds in sync with the server-side data while the tab is
+  // open: poll periodically, and also refetch immediately whenever the
+  // visitor switches back to this tab (covers the case where they were
+  // away longer than the poll interval).
   useEffect(() => {
     function refresh() {
       void loadDisclosures(companiesRef.current);
@@ -197,23 +217,14 @@ export default function Dashboard() {
   function handleDismissDisclosure(id: string) {
     dismissDisclosure(id);
     setDisclosures((prev) => prev.filter((d) => d.id !== id));
-    setTreasuryDisclosures((prev) => prev.filter((d) => d.id !== id));
   }
-
-  const activeList = activeTab === "watchlist" ? disclosures : treasuryDisclosures;
-  const emptyMessage =
-    activeTab === "watchlist"
-      ? companies.length === 0
-        ? "銘柄を登録すると、ここに開示情報が表示されます。"
-        : "登録銘柄の開示情報はまだありません。"
-      : "自己株式取得に関する開示はまだありません。";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">IR Watch</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          東証(TDnet)の適時開示情報をまとめて確認できます。登録銘柄の新着開示に加えて、全銘柄の自己株式取得(自社株買い)関連の開示も別タブで確認できます。登録内容はこの端末のブラウザ内にのみ保存され、他の人には見えません。
+          東証(TDnet)の適時開示情報をまとめて確認できます。登録銘柄の新着開示に加えて、全銘柄の自己株式取得(自社株買い)状況を集計した一覧も別タブで確認できます。登録内容はこの端末のブラウザ内にのみ保存され、他の人には見えません。
         </p>
       </header>
 
@@ -322,54 +333,122 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {snapshotGeneratedAt && (
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            データ更新: {formatDate(snapshotGeneratedAt)}時点・一度表示された開示情報は削除するまで残ります
-          </p>
-        )}
-
         {disclosuresError && (
           <p className="mt-3 text-sm text-red-600 dark:text-red-400">{disclosuresError}</p>
         )}
 
-        {!loadingDisclosures && activeList.length === 0 && !disclosuresError ? (
-          <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">{emptyMessage}</p>
+        {activeTab === "watchlist" ? (
+          <>
+            {snapshotGeneratedAt && (
+              <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                データ更新: {formatDate(snapshotGeneratedAt)}時点・一度表示された開示情報は削除するまで残ります
+              </p>
+            )}
+
+            {!loadingDisclosures && disclosures.length === 0 && !disclosuresError ? (
+              <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
+                {companies.length === 0
+                  ? "銘柄を登録すると、ここに開示情報が表示されます。"
+                  : "登録銘柄の開示情報はまだありません。"}
+              </p>
+            ) : (
+              <ul className="mt-4 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+                {disclosures.map((d) => (
+                  <li key={d.id} className="flex items-start justify-between gap-3 py-3">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        {d.isNew && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                            NEW
+                          </span>
+                        )}
+                        <span>{d.code}</span>
+                        <span>{d.companyName}</span>
+                        <span>{formatDate(d.publishedAt)}</span>
+                      </div>
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium underline-offset-2 hover:underline"
+                      >
+                        {d.title}
+                      </a>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDismissDisclosure(d.id)}
+                      aria-label="この開示を非表示にする"
+                      title="この開示を非表示にする"
+                      className="shrink-0 rounded-full px-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         ) : (
-          <ul className="mt-4 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
-            {activeList.map((d) => (
-              <li key={d.id} className="flex items-start justify-between gap-3 py-3">
-                <div className="flex min-w-0 flex-col gap-1">
-                  <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    {d.isNew && (
-                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                        NEW
-                      </span>
-                    )}
-                    <span>{d.code}</span>
-                    <span>{d.companyName}</span>
-                    <span>{formatDate(d.publishedAt)}</span>
-                  </div>
-                  <a
-                    href={d.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium underline-offset-2 hover:underline"
-                  >
-                    {d.title}
-                  </a>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDismissDisclosure(d.id)}
-                  aria-label="この開示を非表示にする"
-                  title="この開示を非表示にする"
-                  className="shrink-0 rounded-full px-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            {treasurySummaryGeneratedAt && (
+              <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                データ更新: {formatDate(treasurySummaryGeneratedAt)}時点・数値はPDFから自動抽出した参考値です。取得できなかった項目は「—」と表示されます
+              </p>
+            )}
+
+            {!loadingDisclosures && treasurySummary.length === 0 && !disclosuresError ? (
+              <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
+                自己株式取得に関する集計データはまだありません。
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead>
+                    <tr className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <th className="pb-2 pr-3 font-medium">コード</th>
+                      <th className="pb-2 pr-3 font-medium">銘柄名</th>
+                      <th className="pb-2 pr-3 font-medium">総額(上限)</th>
+                      <th className="pb-2 pr-3 font-medium">累計取得額</th>
+                      <th className="pb-2 pr-3 font-medium">先月取得額</th>
+                      <th className="pb-2 pr-3 font-medium">最終開示</th>
+                      <th className="pb-2 font-medium" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {treasurySummary.map((row) => (
+                      <tr key={row.code}>
+                        <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">{row.code}</td>
+                        <td className="py-2 pr-3">{row.companyName}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap">
+                          {formatYen(row.totalPlannedAmountYen)}
+                        </td>
+                        <td className="py-2 pr-3 whitespace-nowrap">
+                          {formatYen(row.cumulativeAmountYen)}
+                        </td>
+                        <td className="py-2 pr-3 whitespace-nowrap">
+                          {formatYen(row.lastMonthAmountYen)}
+                        </td>
+                        <td className="py-2 pr-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
+                          {formatDate(row.latestDisclosureAt)}
+                        </td>
+                        <td className="py-2">
+                          <a
+                            href={row.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs underline-offset-2 hover:underline"
+                          >
+                            詳細
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
