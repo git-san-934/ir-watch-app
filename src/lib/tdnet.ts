@@ -201,3 +201,22 @@ export function filterByCodes(
   const wanted = new Set(codes.map(normalizeCode));
   return disclosures.filter((d) => wanted.has(normalizeCode(d.code)));
 }
+
+// Matches titles like "自己株式取得状況に関するお知らせ" (buyback progress
+// report) or "自己株式の取得(買付け)開始に関するお知らせ" (buyback start),
+// across any company — not just ones on the visitor's watchlist. Titles
+// vary in exact wording, so this looks for "自己株式" (treasury stock)
+// together with a purchase-related word rather than an exact phrase.
+const TREASURY_STOCK_KEYWORD = "自己株式";
+const TREASURY_STOCK_ACTION_KEYWORDS = ["取得", "買付", "買い付け"];
+
+export function isTreasuryStockDisclosure(title: string): boolean {
+  return (
+    title.includes(TREASURY_STOCK_KEYWORD) &&
+    TREASURY_STOCK_ACTION_KEYWORDS.some((keyword) => title.includes(keyword))
+  );
+}
+
+export function filterTreasuryStockDisclosures(disclosures: Disclosure[]): Disclosure[] {
+  return disclosures.filter((d) => isTreasuryStockDisclosure(d.title));
+}

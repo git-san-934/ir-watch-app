@@ -4,6 +4,8 @@ import {
   fetchDisclosuresSnapshot,
   fetchRecentDisclosures,
   filterByCodes,
+  filterTreasuryStockDisclosures,
+  isTreasuryStockDisclosure,
   normalizeCode,
 } from "@/lib/tdnet";
 
@@ -220,6 +222,51 @@ describe("filterByCodes", () => {
 
     expect(filterByCodes(disclosures, ["7203"])).toEqual([disclosures[0]]);
     expect(filterByCodes(disclosures, ["9999"])).toEqual([]);
+  });
+});
+
+describe("isTreasuryStockDisclosure / filterTreasuryStockDisclosures", () => {
+  it("matches titles mentioning treasury stock together with an acquisition word", () => {
+    expect(isTreasuryStockDisclosure("自己株式取得状況に関するお知らせ")).toBe(true);
+    expect(isTreasuryStockDisclosure("自己株式の取得(買付け)開始に関するお知らせ")).toBe(true);
+    expect(isTreasuryStockDisclosure("自己株式買付状況(経過報告)")).toBe(true);
+  });
+
+  it("does not match unrelated titles, or treasury-stock titles without an action word", () => {
+    expect(isTreasuryStockDisclosure("決算短信〔日本基準〕(連結)")).toBe(false);
+    expect(isTreasuryStockDisclosure("自己株式の消却に関するお知らせ")).toBe(false);
+    expect(isTreasuryStockDisclosure("株式取得(子会社化)に関するお知らせ")).toBe(false);
+  });
+
+  it("filters a mixed list down to just the treasury-stock ones, regardless of company", () => {
+    const disclosures = [
+      {
+        id: "1",
+        code: "7203",
+        companyName: "トヨタ自動車",
+        title: "自己株式取得状況に関するお知らせ",
+        url: "u",
+        publishedAt: "2026-09-01T00:00:00Z",
+      },
+      {
+        id: "2",
+        code: "9999",
+        companyName: "例社",
+        title: "決算短信〔日本基準〕(連結)",
+        url: "u",
+        publishedAt: "2026-09-01T00:00:00Z",
+      },
+      {
+        id: "3",
+        code: "1111",
+        companyName: "別社",
+        title: "自己株式の取得(買付け)開始に関するお知らせ",
+        url: "u",
+        publishedAt: "2026-09-01T00:00:00Z",
+      },
+    ];
+
+    expect(filterTreasuryStockDisclosures(disclosures).map((d) => d.id)).toEqual(["1", "3"]);
   });
 });
 
