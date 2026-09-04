@@ -4,17 +4,14 @@ import {
   dismissDisclosure,
   DuplicateCompanyError,
   getArchivedDisclosures,
-  getArchivedFilings,
   getDismissedIds,
   listWatchedCompanies,
   mergeArchivedDisclosures,
-  mergeArchivedFilings,
   pruneDismissedIds,
   removeWatchedCompany,
   type StorageLike,
 } from "@/lib/watchlist";
 import type { Disclosure } from "@/lib/tdnet";
-import type { EdinetFiling } from "@/lib/edinet";
 
 function makeDisclosure(id: string, overrides: Partial<Disclosure> = {}): Disclosure {
   return {
@@ -24,22 +21,6 @@ function makeDisclosure(id: string, overrides: Partial<Disclosure> = {}): Disclo
     title: `開示 ${id}`,
     url: `https://example.com/${id}.pdf`,
     publishedAt: "2026-09-01T00:00:00Z",
-    ...overrides,
-  };
-}
-
-function makeFiling(docId: string, overrides: Partial<EdinetFiling> = {}): EdinetFiling {
-  return {
-    docId,
-    edinetCode: "E00001",
-    secCode: "7203",
-    filerName: "トヨタ自動車株式会社",
-    docTypeCode: "120",
-    docTypeLabel: "有価証券報告書",
-    docDescription: `書類 ${docId}`,
-    periodStart: "2025-04-01",
-    periodEnd: "2026-03-31",
-    submittedAt: "2026-06-27 15:00",
     ...overrides,
   };
 }
@@ -126,21 +107,5 @@ describe("watchlist storage", () => {
     );
     expect(second.map((d) => d.id)).toEqual(["c"]);
     expect(getArchivedDisclosures(storage).map((d) => d.id)).toEqual(["a", "b", "c"]);
-  });
-
-  it("archives EDINET filings permanently, merging in only unseen ones", () => {
-    const storage = createMemoryStorage();
-    expect(getArchivedFilings(storage)).toEqual([]);
-
-    const first = mergeArchivedFilings([makeFiling("a"), makeFiling("b")], storage);
-    expect(first.map((f) => f.docId)).toEqual(["a", "b"]);
-    expect(getArchivedFilings(storage)).toHaveLength(2);
-
-    const second = mergeArchivedFilings(
-      [makeFiling("a"), makeFiling("b"), makeFiling("c")],
-      storage
-    );
-    expect(second.map((f) => f.docId)).toEqual(["c"]);
-    expect(getArchivedFilings(storage).map((f) => f.docId)).toEqual(["a", "b", "c"]);
   });
 });

@@ -6,11 +6,9 @@ import {
   dismissDisclosure,
   DuplicateCompanyError,
   getArchivedDisclosures,
-  getArchivedFilings,
   getDismissedIds,
   listWatchedCompanies,
   mergeArchivedDisclosures,
-  mergeArchivedFilings,
   pruneDismissedIds,
   removeWatchedCompany,
   type WatchedCompany,
@@ -22,14 +20,8 @@ import {
   type Disclosure,
   type TreasuryStockSummaryRow,
 } from "@/lib/tdnet";
-import {
-  fetchEdinetFilingsSnapshot,
-  filterFilingsByCodes,
-  type EdinetFiling,
-} from "@/lib/edinet";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
-type FilingItem = EdinetFiling & { isNew: boolean };
 type Tab = "watchlist" | "treasury";
 
 // TSE tickers are normally 4 digits, but JPX's newer alphanumeric codes
@@ -76,11 +68,6 @@ export default function Dashboard() {
 
   const [loadingDisclosures, setLoadingDisclosures] = useState(false);
   const [disclosuresError, setDisclosuresError] = useState<string | null>(null);
-
-  const [filings, setFilings] = useState<FilingItem[]>([]);
-  const [filingsGeneratedAt, setFilingsGeneratedAt] = useState<string | null>(null);
-  const [loadingFilings, setLoadingFilings] = useState(false);
-  const [filingsError, setFilingsError] = useState<string | null>(null);
 
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -151,48 +138,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  const loadFilings = useCallback(async (watchList: WatchedCompany[]) => {
-    if (watchList.length === 0) {
-      setFilings([]);
-      return;
-    }
-    setLoadingFilings(true);
-    setFilingsError(null);
-    try {
-      const codes = watchList.map((c) => c.code);
-      const snapshot = await fetchEdinetFilingsSnapshot();
-
-      // Same permanent-merge approach as disclosures above: the snapshot
-      // is only a rolling window, but once a filing has been seen it's
-      // kept in this visitor's archive for good.
-      const candidates = filterFilingsByCodes(snapshot.filings, codes);
-      const added = mergeArchivedFilings(candidates);
-      const addedIds = new Set(added.map((f) => f.docId));
-
-      const archive = getArchivedFilings();
-      const visible = filterFilingsByCodes(archive, codes)
-        .map((f) => ({ ...f, isNew: addedIds.has(f.docId) }))
-        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-
-      setFilings(visible);
-      setFilingsGeneratedAt(snapshot.generatedAt);
-    } catch {
-      setFilingsError(
-        "有価証券報告書等の取得に失敗しました。しばらくしてから再度お試しください。"
-      );
-    } finally {
-      setLoadingFilings(false);
-    }
-  }, []);
-
-  const loadAll = useCallback(
-    (watchList: WatchedCompany[]) => {
-      void loadDisclosures(watchList);
-      void loadFilings(watchList);
-    },
-    [loadDisclosures, loadFilings]
-  );
-
   useEffect(() => {
     // Defer to a microtask so these state updates (hydrating from
     // localStorage, which is only available client-side) don't run
@@ -202,20 +147,19 @@ export default function Dashboard() {
       setCompanies(initial);
       setHydrated(true);
       // Always load — the treasury-stock summary spans every company and
-      // doesn't depend on having anything registered (loadFilings is a
-      // no-op internally when there's nothing on the watchlist yet).
-      loadAll(initial);
+      // doesn't depend on having anything registered.
+      void loadDisclosures(initial);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep both feeds in sync with the server-side data while the tab is
+  // Keep the feed in sync with the server-side data while the tab is
   // open: poll periodically, and also refetch immediately whenever the
   // visitor switches back to this tab (covers the case where they were
   // away longer than the poll interval).
   useEffect(() => {
     function refresh() {
-      loadAll(companiesRef.current);
+      void loadDisclosures(companiesRef.current);
     }
 
     const intervalId = setInterval(refresh, AUTO_REFRESH_INTERVAL_MS);
@@ -231,7 +175,7 @@ export default function Dashboard() {
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadAll]);
+  }, [loadDisclosures]);
 
   function handleAddCompany(e: React.FormEvent) {
     e.preventDefault();
@@ -255,7 +199,7 @@ export default function Dashboard() {
       setCompanies(next);
       setCodeInput("");
       setNameInput("");
-      loadAll(next);
+      void loadDisclosures(next);
     } catch (err) {
       setFormError(
         err instanceof DuplicateCompanyError ? "既に登録済みの銘柄です" : "登録に失敗しました"
@@ -267,7 +211,7 @@ export default function Dashboard() {
     removeWatchedCompany(id);
     const next = companies.filter((c) => c.id !== id);
     setCompanies(next);
-    loadAll(next);
+    void loadDisclosures(next);
   }
 
   function handleDismissDisclosure(id: string) {
@@ -381,7 +325,7 @@ export default function Dashboard() {
           </div>
           <button
             type="button"
-            onClick={() => loadAll(companies)}
+            onClick={() => void loadDisclosures(companies)}
             disabled={loadingDisclosures}
             className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
           >
@@ -505,106 +449,6 @@ export default function Dashboard() {
               </div>
             )}
           </>
-        )}
-      </section>
-
-      <section className="flex-1">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium">有価証券報告書・四半期/半期報告書</h2>
-          <button
-            type="button"
-            onClick={() => loadAll(companies)}
-            disabled={loadingFilings || companies.length === 0}
-            className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {loadingFilings ? "更新中..." : "更新"}
-          </button>
-        </div>
-
-        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-          EDINET(金融庁)に提出された書類の一覧です。提出から数日以内のものは主要な経営指標(売上高等)も表示されます。分析機能はまだ未実装です。
-        </p>
-
-        {filingsGeneratedAt && (
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            データ更新: {formatDate(filingsGeneratedAt)}時点
-          </p>
-        )}
-
-        {filingsError && (
-          <p className="mt-3 text-sm text-red-600 dark:text-red-400">{filingsError}</p>
-        )}
-
-        {companies.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-            銘柄を登録すると、ここに提出書類が表示されます。
-          </p>
-        ) : !loadingFilings && filings.length === 0 && !filingsError && filingsGeneratedAt === null ? (
-          <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-            このデータはまだ準備中です(EDINET連携の設定待ち)。
-          </p>
-        ) : !loadingFilings && filings.length === 0 && !filingsError ? (
-          <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-            登録銘柄の提出書類はまだありません。
-          </p>
-        ) : (
-          <ul className="mt-4 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
-            {filings.map((f) => (
-              <li key={f.docId} className="flex flex-col gap-1 py-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {f.isNew && (
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                      NEW
-                    </span>
-                  )}
-                  <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                    {f.docTypeLabel}
-                  </span>
-                  <span>{f.secCode}</span>
-                  <span>{f.filerName}</span>
-                  {f.periodStart && f.periodEnd && (
-                    <span>
-                      {f.periodStart} 〜 {f.periodEnd}
-                    </span>
-                  )}
-                  <span>{formatDate(f.submittedAt)}</span>
-                </div>
-                {f.docDescription && (
-                  <p className="text-sm font-medium">{f.docDescription}</p>
-                )}
-                {f.financials && f.financials.length > 0 && (
-                  <div className="mt-1 overflow-x-auto">
-                    <table className="text-xs">
-                      <thead>
-                        <tr className="text-zinc-400 dark:text-zinc-500">
-                          <th className="pr-3 text-left font-normal">期間</th>
-                          <th className="pr-3 text-left font-normal">区分</th>
-                          <th className="pr-3 text-right font-normal">売上高</th>
-                          <th className="pr-3 text-right font-normal">営業利益</th>
-                          <th className="pr-3 text-right font-normal">経常利益</th>
-                          <th className="pr-3 text-right font-normal">当期純利益</th>
-                          <th className="text-right font-normal">EPS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {f.financials.map((p, i) => (
-                          <tr key={i}>
-                            <td className="pr-3">{p.periodLabel}</td>
-                            <td className="pr-3">{p.consolidated ? "連結" : "個別"}</td>
-                            <td className="pr-3 text-right">{formatYen(p.netSales)}</td>
-                            <td className="pr-3 text-right">{formatYen(p.operatingIncome)}</td>
-                            <td className="pr-3 text-right">{formatYen(p.ordinaryIncome)}</td>
-                            <td className="pr-3 text-right">{formatYen(p.profit)}</td>
-                            <td className="text-right">{p.basicEarningsPerShare ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
         )}
       </section>
     </div>
