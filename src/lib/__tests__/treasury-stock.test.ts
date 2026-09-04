@@ -21,25 +21,44 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
 
+// Real TDnet buyback progress reports repeat the same label
+// "(株式の)取得価額の総額" up to three times with nothing else
+// distinguishing them: once for the reporting month, once (marked "上限")
+// for the board-approved plan total, and once under a "累計" heading for
+// the cumulative-to-date total. These fixtures mirror that real structure.
+const REALISTIC_FILING_TEXT =
+  "３．当月中における自己株式の取得価額の総額　５０，０００，０００円" +
+  "（ご参考）　取得価額の総額の上限　１０，０００，０００，０００円（上限）" +
+  "累計取得自己株式に係る取得価額の総額　３，５００，０００，０００円";
+
 describe("parseBuybackPdfText", () => {
-  it("extracts the total planned amount (取得価額の総額)", () => {
-    const text = "1. 取得する株式の総数の上限 500,000株\n2. 取得価額の総額(上限) 3,000,000,000円";
-    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(3_000_000_000);
+  it("extracts the plan's total (upper-limit-marked) amount", () => {
+    const text = "取得価額の総額　１０，０００，０００，０００円（上限）";
+    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(10_000_000_000);
   });
 
-  it("extracts the cumulative amount (累計取得価額)", () => {
-    const text = "累計取得株式数 120,000株　累計取得価額 720,000,000円";
-    expect(parseBuybackPdfText(text).cumulativeAmountYen).toBe(720_000_000);
+  it("extracts the cumulative amount that follows a 累計 heading", () => {
+    const text = "累計取得自己株式に係る取得価額の総額　３，５００，０００，０００円";
+    expect(parseBuybackPdfText(text).cumulativeAmountYen).toBe(3_500_000_000);
   });
 
-  it("extracts this period's amount (当月中の取得価額)", () => {
-    const text = "当月中に取得した株式に係る取得価額 45,000,000円";
+  it("extracts this period's amount (the remaining, unmarked occurrence)", () => {
+    const text = "当月中における自己株式の取得価額の総額　４５，０００，０００円";
     expect(parseBuybackPdfText(text).periodAmountYen).toBe(45_000_000);
   });
 
-  it("handles full-width digits and commas", () => {
-    const text = "取得価額の総額　３，０００，０００，０００円";
-    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(3_000_000_000);
+  it("handles amounts stated in 百万円 (millions)", () => {
+    const text = "取得価額の総額　２，０００百万円（上限）";
+    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(2_000_000_000);
+  });
+
+  it("disambiguates all three figures when the same label appears three times in one filing", () => {
+    const result = parseBuybackPdfText(REALISTIC_FILING_TEXT);
+    expect(result).toEqual({
+      totalPlannedAmountYen: 10_000_000_000,
+      cumulativeAmountYen: 3_500_000_000,
+      periodAmountYen: 50_000_000,
+    });
   });
 
   it("returns null fields when nothing matches, instead of throwing", () => {
@@ -71,8 +90,9 @@ describe("buildTreasuryStockSummary", () => {
 
     const pdfTextByUrl: Record<string, string> = {
       "https://example.com/new.pdf":
-        "累計取得価額 720,000,000円 当月中の取得価額 45,000,000円",
-      "https://example.com/old.pdf": "取得価額の総額(上限) 3,000,000,000円",
+        "当月中における自己株式の取得価額の総額45,000,000円" +
+        "累計自己株式に係る取得価額の総額720,000,000円",
+      "https://example.com/old.pdf": "取得価額の総額の上限3,000,000,000円（上限）",
     };
 
     const fetchImpl = vi.fn().mockImplementation(() => jsonResponse({}));
@@ -103,11 +123,7 @@ describe("buildTreasuryStockSummary", () => {
     ];
 
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
-    const extractPdfText = vi
-      .fn()
-      .mockResolvedValue(
-        "取得価額の総額 1,000,000円 累計取得価額 500,000円 当月中の取得価額 100,000円"
-      );
+    const extractPdfText = vi.fn().mockResolvedValue(REALISTIC_FILING_TEXT);
 
     await buildTreasuryStockSummary(disclosures, { fetchImpl, extractPdfText });
 

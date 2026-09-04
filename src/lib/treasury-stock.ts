@@ -16,10 +16,26 @@
  * fetchTreasuryStockSummary() in src/lib/tdnet.ts instead.
  *
  * This is inherently best-effort. TSE treasury-stock disclosure PDFs
- * follow a conventional layout but wording varies company to company,
- * and this environment's outbound network restrictions meant the
- * patterns below could not be checked against a real filing — expect to
- * tune parseBuybackPdfText() after seeing it run against live data.
+ * follow a conventional layout but wording varies company to company.
+ * The label patterns below were tuned against 8 real filings pulled via
+ * this file's own DEBUG_TREASURY_PDF_TEXT logging (see
+ * buildTreasuryStockSummary) — that couldn't be done from the sandbox
+ * this code was first written in, so treat this as a first real pass
+ * rather than exhaustively validated; more filing variants may still
+ * need handling as they show up.
+ *
+ * A key finding from those samples: the label "(株式の)取得価額の総額"
+ * appears up to three times in the same monthly progress-report PDF —
+ * once for the reporting month itself, once for the board resolution's
+ * upper limit, and once for the cumulative-to-date total — with no
+ * label text distinguishing them. What does distinguish them:
+ *   - the upper-limit one is always suffixed with "上限" nearby
+ *     ("...円（上限）" / "...円（上限とする）")
+ *   - the cumulative one follows a "累計" heading, typically within a
+ *     couple hundred characters
+ *   - the reporting-month one is whichever is left — normally the
+ *     first occurrence in the document, since it appears before the
+ *     "（ご参考）" section that carries the other two
  */
 import pdfParse from "pdf-parse";
 import {
@@ -39,32 +55,82 @@ function toHalfWidthDigits(text: string): string {
   return text.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
 }
 
+const AMOUNT_LABEL = "取得価額の総額";
+// Real filings sometimes state the amount in 百万円 (millions) instead of
+// 円 directly (e.g. "2,000百万円"), especially for very large buybacks.
+const AMOUNT_AFTER_LABEL = /^[^0-9]{0,15}([0-9,]{1,15})(百万)?円/;
+const UPPER_LIMIT_MARKER = /^[^0-9]{0,6}上限/;
+// How far a "累計" heading can precede its amount and still count as
+// governing it — generous enough to span the item's own sub-heading
+// and numbering (e.g. "(2026年8月31日現在)(1)取得した株式の総数…株(2)")
+// without being so wide it could pick up an unrelated later occurrence.
+const CUMULATIVE_HEADING_WINDOW = 200;
+
+interface LabeledAmount {
+  value: number;
+  /** Index of the amount digits themselves (after the label), for ordering/windowing. */
+  index: number;
+  hasUpperLimitMarker: boolean;
+}
+
+/** Finds every occurrence of `label` immediately followed by a yen amount. */
+function findLabeledAmounts(text: string, label: string): LabeledAmount[] {
+  const results: LabeledAmount[] = [];
+  let searchFrom = 0;
+  for (;;) {
+    const labelIdx = text.indexOf(label, searchFrom);
+    if (labelIdx === -1) break;
+    searchFrom = labelIdx + label.length;
+
+    const after = text.slice(searchFrom, searchFrom + 40);
+    const match = after.match(AMOUNT_AFTER_LABEL);
+    if (!match) continue;
+
+    const digits = match[1].replace(/,/g, "");
+    let value = Number(digits);
+    if (match[2]) value *= 1_000_000; // "百万円"
+    if (!Number.isFinite(value) || value <= 0) continue;
+
+    const amountIndex = searchFrom + match.index!;
+    const tailAfterAmount = text.slice(searchFrom + match[0].length, searchFrom + match[0].length + 10);
+    results.push({
+      value,
+      index: amountIndex,
+      hasUpperLimitMarker: UPPER_LIMIT_MARKER.test(tailAfterAmount),
+    });
+  }
+  return results;
+}
+
 /**
  * Pure text parser — no network/PDF involved, so this is the part unit
- * tests can actually exercise. Looks for a labeled amount ("取得価額の
- * 総額 ... 円" etc.) rather than an exact phrase, since real filings pad
- * the text between the label and the number with things like "(上限)"
- * or full-width spaces.
+ * tests can actually exercise.
  */
 export function parseBuybackPdfText(rawText: string): ParsedBuybackFigures {
   const text = toHalfWidthDigits(rawText)
     .replace(/[，]/g, ",")
     .replace(/\s+/g, "");
 
-  function findAmount(labelPattern: RegExp): number | null {
-    const match = text.match(labelPattern);
-    if (!match) return null;
-    const digits = match[1].replace(/,/g, "");
-    const n = Number(digits);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }
+  const amounts = findLabeledAmounts(text, AMOUNT_LABEL);
+  const totalPlanned = amounts.find((a) => a.hasUpperLimitMarker);
+
+  const cumulativeHeadingIndex = text.indexOf("累計");
+  const cumulative =
+    cumulativeHeadingIndex === -1
+      ? undefined
+      : amounts.find(
+          (a) =>
+            !a.hasUpperLimitMarker &&
+            a.index > cumulativeHeadingIndex &&
+            a.index - cumulativeHeadingIndex < CUMULATIVE_HEADING_WINDOW
+        );
+
+  const period = amounts.find((a) => !a.hasUpperLimitMarker && a !== cumulative);
 
   return {
-    totalPlannedAmountYen: findAmount(/取得価額の総額[^0-9]{0,12}([0-9,]{4,})円/),
-    cumulativeAmountYen: findAmount(/累計(?:の)?取得価額[^0-9]{0,12}([0-9,]{4,})円/),
-    periodAmountYen: findAmount(
-      /(?:当月中|当該報告期間中|報告期間中)[^0-9]{0,20}取得価額[^0-9]{0,12}([0-9,]{4,})円/
-    ),
+    totalPlannedAmountYen: totalPlanned?.value ?? null,
+    cumulativeAmountYen: cumulative?.value ?? null,
+    periodAmountYen: period?.value ?? null,
   };
 }
 
