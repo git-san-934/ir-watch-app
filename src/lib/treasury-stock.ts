@@ -61,9 +61,13 @@ function toHalfWidthDigits(text: string): string {
 }
 
 const AMOUNT_LABEL = "取得価額の総額";
-// Real filings sometimes state the amount in 百万円 (millions) instead of
-// 円 directly (e.g. "2,000百万円"), especially for very large buybacks.
-const AMOUNT_AFTER_LABEL = /^[^0-9]{0,15}([0-9,]{1,15})(百万)?円/;
+// Real filings sometimes state the amount in 百万円 (millions) or 億円
+// (hundred-millions) instead of 円 directly (e.g. "2,000百万円",
+// "60億円（上限）") — especially the board resolution's original upper
+// limit, which is often the number a company sets when the plan is
+// approved and tends to be round in whichever of these units reads
+// more naturally at that size.
+const AMOUNT_AFTER_LABEL = /^[^0-9]{0,15}([0-9,]{1,15})(百万|億)?円/;
 const UPPER_LIMIT_MARKER = /^[^0-9]{0,6}上限/;
 // How far a "累計" heading can precede its amount and still count as
 // governing it — generous enough to span the item's own sub-heading
@@ -100,7 +104,8 @@ function findLabeledAmounts(text: string, label: string): LabeledAmount[] {
 
     const digits = match[1].replace(/,/g, "");
     let value = Number(digits);
-    if (match[2]) value *= 1_000_000; // "百万円"
+    if (match[2] === "百万") value *= 1_000_000;
+    else if (match[2] === "億") value *= 100_000_000;
     if (!Number.isFinite(value) || value <= 0) continue;
 
     const amountIndex = searchFrom + match.index!;

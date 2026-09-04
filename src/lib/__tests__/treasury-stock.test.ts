@@ -52,6 +52,11 @@ describe("parseBuybackPdfText", () => {
     expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(2_000_000_000);
   });
 
+  it("handles amounts stated in 億円 (hundred-millions) — the board resolution's original total, real filings show, is often quoted this way", () => {
+    const text = "株式の取得価額の総額　60億円（上限）";
+    expect(parseBuybackPdfText(text).totalPlannedAmountYen).toBe(6_000_000_000);
+  });
+
   it("disambiguates all three figures when the same label appears three times in one filing", () => {
     const result = parseBuybackPdfText(REALISTIC_FILING_TEXT);
     expect(result).toEqual({
