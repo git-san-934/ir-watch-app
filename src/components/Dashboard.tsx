@@ -20,9 +20,16 @@ import {
   type Disclosure,
   type TreasuryStockSummaryRow,
 } from "@/lib/tdnet";
+import {
+  calculateForecast,
+  getForecastInput,
+  removeForecastInput,
+  setForecastInput,
+  type MarketCapForecastInput,
+} from "@/lib/market-cap-forecast";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
-type Tab = "watchlist" | "treasury";
+type Tab = "watchlist" | "treasury" | "forecast";
 
 // TSE tickers are normally 4 digits, but JPX's newer alphanumeric codes
 // (e.g. "130A") mix in letters too — accept either, case-insensitively.
@@ -49,6 +56,10 @@ const YEN_PER_OKU = 100_000_000;
 function formatOkuYen(amount: number | null): string {
   if (amount === null) return "—";
   const oku = amount / YEN_PER_OKU;
+  return `${oku.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}億円`;
+}
+
+function formatOku(oku: number): string {
   return `${oku.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}億円`;
 }
 
@@ -212,6 +223,7 @@ export default function Dashboard() {
 
   function handleRemoveCompany(id: string) {
     removeWatchedCompany(id);
+    removeForecastInput(id);
     const next = companies.filter((c) => c.id !== id);
     setCompanies(next);
     void loadDisclosures(next);
@@ -325,6 +337,19 @@ export default function Dashboard() {
             >
               自社株買い(全銘柄)
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "forecast"}
+              onClick={() => setActiveTab("forecast")}
+              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                activeTab === "forecast"
+                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                  : "text-blue-500 hover:bg-blue-50 dark:text-blue-400/70 dark:hover:bg-blue-950/30"
+              }`}
+            >
+              時価総額予測
+            </button>
           </div>
           <button
             type="button"
@@ -392,7 +417,7 @@ export default function Dashboard() {
               </ul>
             )}
           </>
-        ) : (
+        ) : activeTab === "treasury" ? (
           <>
             {treasurySummaryGeneratedAt && (
               <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
@@ -452,8 +477,145 @@ export default function Dashboard() {
               </div>
             )}
           </>
+        ) : (
+          <ForecastTab companies={companies} hydrated={hydrated} />
         )}
       </section>
     </div>
+  );
+}
+
+function formatPercent(rate: number): string {
+  const percent = rate * 100;
+  const sign = percent > 0 ? "+" : "";
+  return `${sign}${percent.toLocaleString("ja-JP", { maximumFractionDigits: 1 })}%`;
+}
+
+function changeColorClass(rate: number): string {
+  if (rate > 0) return "text-emerald-600 dark:text-emerald-400";
+  if (rate < 0) return "text-red-600 dark:text-red-400";
+  return "text-zinc-500 dark:text-zinc-400";
+}
+
+function ForecastTab({
+  companies,
+  hydrated,
+}: {
+  companies: WatchedCompany[];
+  hydrated: boolean;
+}) {
+  if (!hydrated) return null;
+
+  if (companies.length === 0) {
+    return (
+      <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
+        監視銘柄を登録すると、ここで時価総額の予測シナリオを試算できます。
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+        入力した数値をもとにした簡易試算です(AI による自動判断や実際の株価データの取得は行っていません)。販売個数・販売単価の増減率はマイナスの値も入力できます。
+      </p>
+      <ul className="mt-4 flex flex-col gap-4">
+        {companies.map((company) => (
+          <ForecastCard key={company.id} company={company} />
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function ForecastCard({ company }: { company: WatchedCompany }) {
+  const [input, setInput] = useState<MarketCapForecastInput>(() =>
+    getForecastInput(company.id)
+  );
+
+  const result = calculateForecast(input);
+
+  function update(patch: Partial<MarketCapForecastInput>) {
+    const next = { ...input, ...patch };
+    setInput(next);
+    setForecastInput(company.id, next);
+  }
+
+  return (
+    <li className="rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-950/10">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-zinc-500 dark:text-zinc-400">{company.code}</span>
+        <span className="font-medium">{company.name}</span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <label className="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+          現在の時価総額(億円)
+          <input
+            type="number"
+            value={input.currentMarketCapOku ?? ""}
+            onChange={(e) =>
+              update({
+                currentMarketCapOku: e.target.value === "" ? null : Number(e.target.value),
+              })
+            }
+            placeholder="例: 30000"
+            className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+          販売個数の増減率(%)
+          <input
+            type="number"
+            value={input.volumeChangeRatePercent}
+            onChange={(e) => update({ volumeChangeRatePercent: Number(e.target.value) })}
+            className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+          販売単価の増減率(%)
+          <input
+            type="number"
+            value={input.priceChangeRatePercent}
+            onChange={(e) => update({ priceChangeRatePercent: Number(e.target.value) })}
+            className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+          本決算までの残り四半期数
+          <input
+            type="number"
+            min={1}
+            max={4}
+            value={input.remainingQuarters}
+            onChange={(e) => update({ remainingQuarters: Number(e.target.value) })}
+            className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+          />
+        </label>
+      </div>
+
+      {result === null ? (
+        <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+          現在の時価総額を入力すると、見込み時価総額が表示されます。
+        </p>
+      ) : (
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-md bg-white/60 p-3 text-sm dark:bg-zinc-900/40">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">次の四半期時点の見込み</div>
+            <div className="mt-1 font-medium">{formatOku(result.nextQuarterMarketCapOku)}</div>
+            <div className={`text-xs ${changeColorClass(result.nextQuarterChangeRate)}`}>
+              現在比 {formatPercent(result.nextQuarterChangeRate)}
+            </div>
+          </div>
+          <div className="rounded-md bg-white/60 p-3 text-sm dark:bg-zinc-900/40">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">次の本決算時点の見込み</div>
+            <div className="mt-1 font-medium">{formatOku(result.nextFullYearMarketCapOku)}</div>
+            <div className={`text-xs ${changeColorClass(result.nextFullYearChangeRate)}`}>
+              現在比 {formatPercent(result.nextFullYearChangeRate)}
+            </div>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
