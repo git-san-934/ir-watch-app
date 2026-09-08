@@ -225,7 +225,7 @@ export default function Dashboard() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">IR Watch</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">自社株買情報</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           東証(TDnet)の適時開示情報をまとめて確認できます。登録銘柄の新着開示に加えて、全銘柄の自己株式取得(自社株買い)状況を集計した一覧も別タブで確認できます。登録内容はこの端末のブラウザ内にのみ保存され、他の人には見えません。
         </p>
