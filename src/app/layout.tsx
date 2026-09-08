@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IR Watch",
+  title: "自社株買情報",
   description: "東証(TDnet)の適時開示情報を登録銘柄ごとに監視するアプリ",
 };
 
