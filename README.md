@@ -57,6 +57,34 @@ npm run dev
 
 [http://localhost:3000](http://localhost:3000) を開いてください。
 
+### Windows での開発
+
+このリポジトリはシェルスクリプトや Unix 固有のコマンドに依存していないため、Windows でも Mac/Linux と同じコマンドでそのまま開発できます。WSL や Git Bash は不要で、PowerShell / コマンドプロンプトから直接コマンドラインで作業できます。
+
+1. [Git for Windows](https://gitforwindows.org/) と Node.js 20 以上([nodejs.org](https://nodejs.org/) の LTS 版、または `winget install OpenJS.NodeJS.LTS`)をインストールする
+2. 管理したい場所(例: `C:\dev`)にフォルダを用意し、その中にリポジトリをクローンする
+
+   ```powershell
+   cd C:\dev
+   git clone https://github.com/git-san-934/ir-watch-app.git
+   cd ir-watch-app
+   ```
+
+3. 依存関係をインストールして開発サーバーを起動する
+
+   ```powershell
+   npm install
+   npm run dev
+   ```
+
+4. 以降、`npm install` `npm run dev` `npm test` `npm run lint` `npx tsc --noEmit` `npx tsx scripts/fetch-tdnet.ts` `npm run build` `npm run start` は下記「テスト・Lint・静的書き出し」節と同じコマンドのまま Windows でも実行できます
+
+補足:
+
+- 改行コードは `.gitattributes` でリポジトリ内 LF に統一しているため、Windows 側の Git 設定(`core.autocrlf`)による差分の混入は気にする必要はありません
+- GitHub Actions(`.github/workflows/deploy.yml`)は Ubuntu 上で実行されるため、`GITHUB_PAGES=true` の指定は CI 側の YAML でのみ行われます。ローカル(Windows 含む)で `npm run build` を実行する際はこの環境変数を指定する必要はなく、そのままルートパスでビルドされます
+- ブランチの作成・コミット・プッシュも通常の Git コマンド(`git checkout -b ...` `git add` `git commit` `git push`)がそのまま使えます
+
 ## テスト・Lint・静的書き出し
 
 ```bash
