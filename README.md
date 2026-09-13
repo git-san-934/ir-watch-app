@@ -62,13 +62,15 @@ npm run dev
 このリポジトリはシェルスクリプトや Unix 固有のコマンドに依存していないため、Windows でも Mac/Linux と同じコマンドでそのまま開発できます。WSL や Git Bash は不要で、PowerShell / コマンドプロンプトから直接コマンドラインで作業できます。
 
 1. [Git for Windows](https://gitforwindows.org/) と Node.js 20 以上([nodejs.org](https://nodejs.org/) の LTS 版、または `winget install OpenJS.NodeJS.LTS`)をインストールする
-2. 管理したい場所(例: `C:\dev`)にフォルダを用意し、その中にリポジトリをクローンする
+2. 管理したい場所(例: `C:\Users\<ユーザー名>\Desktop`)にリポジトリをクローンする
 
    ```powershell
-   cd C:\dev
+   cd C:\Users\<ユーザー名>\Desktop
    git clone https://github.com/git-san-934/ir-watch-app.git
    cd ir-watch-app
    ```
+
+   クローン後のフォルダは `C:\Users\<ユーザー名>\Desktop\ir-watch-app` になります。
 
 3. 依存関係をインストールして開発サーバーを起動する
 
