@@ -411,9 +411,9 @@ export default function Dashboard() {
                     <tr className="text-xs text-zinc-500 dark:text-zinc-400">
                       <th className="pb-2 pr-3 font-medium">コード</th>
                       <th className="pb-2 pr-3 font-medium">銘柄名</th>
-                      <th className="pb-2 pr-3 font-medium">総額(上限)</th>
-                      <th className="pb-2 pr-3 font-medium">累計取得額</th>
                       <th className="pb-2 pr-3 font-medium">先月取得額</th>
+                      <th className="pb-2 pr-3 font-medium">累計取得額</th>
+                      <th className="pb-2 pr-3 font-medium">総額(上限)</th>
                       <th className="pb-2 pr-3 font-medium">最終開示</th>
                       <th className="pb-2 font-medium" />
                     </tr>
@@ -424,13 +424,13 @@ export default function Dashboard() {
                         <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">{row.code}</td>
                         <td className="py-2 pr-3">{row.companyName}</td>
                         <td className="py-2 pr-3 whitespace-nowrap">
-                          {formatOkuYen(row.totalPlannedAmountYen)}
+                          {formatOkuYen(row.lastMonthAmountYen)}
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap">
                           {formatOkuYen(row.cumulativeAmountYen)}
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap">
-                          {formatOkuYen(row.lastMonthAmountYen)}
+                          {formatOkuYen(row.totalPlannedAmountYen)}
                         </td>
                         <td className="py-2 pr-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
                           {formatDate(row.latestDisclosureAt)}
