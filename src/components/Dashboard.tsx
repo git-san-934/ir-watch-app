@@ -20,6 +20,7 @@ import {
   type Disclosure,
   type TreasuryStockSummaryRow,
 } from "@/lib/tdnet";
+import { buildCsvChunks, downloadCsvChunks } from "@/lib/csv";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
 type Tab = "watchlist" | "treasury";
@@ -222,6 +223,37 @@ export default function Dashboard() {
     setDisclosures((prev) => prev.filter((d) => d.id !== id));
   }
 
+  function handleExportCsv() {
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const chunks =
+      activeTab === "watchlist"
+        ? buildCsvChunks(
+            `監視銘柄開示情報_${dateStr}`,
+            ["証券コード", "会社名", "タイトル", "公開日時", "URL"],
+            disclosures.map((d) => [
+              d.code,
+              d.companyName,
+              d.title,
+              formatDate(d.publishedAt),
+              d.url,
+            ])
+          )
+        : buildCsvChunks(
+            `自社株買い集計_${dateStr}`,
+            ["証券コード", "銘柄名", "先月取得額", "累計取得額", "総額(上限)", "最終開示", "詳細URL"],
+            treasurySummary.map((row) => [
+              row.code,
+              row.companyName,
+              formatOkuYen(row.lastMonthAmountYen),
+              formatOkuYen(row.cumulativeAmountYen),
+              formatOkuYen(row.totalPlannedAmountYen),
+              formatDate(row.latestDisclosureAt),
+              row.sourceUrl,
+            ])
+          );
+    downloadCsvChunks(chunks);
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
       <header>
@@ -326,14 +358,26 @@ export default function Dashboard() {
               自社株買い(全銘柄)
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadDisclosures(companies)}
-            disabled={loadingDisclosures}
-            className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {loadingDisclosures ? "更新中..." : "更新"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={
+                activeTab === "watchlist" ? disclosures.length === 0 : treasurySummary.length === 0
+              }
+              className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              CSVで出力
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadDisclosures(companies)}
+              disabled={loadingDisclosures}
+              className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              {loadingDisclosures ? "更新中..." : "更新"}
+            </button>
+          </div>
         </div>
 
         {disclosuresError && (
