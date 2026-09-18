@@ -13,7 +13,7 @@ describe("buildCsvChunks", () => {
     );
 
     expect(chunks).toHaveLength(1);
-    expect(chunks[0].filename).toBe("export.csv");
+    expect(chunks[0].filename).toBe("export.txt");
     expect(chunks[0].content).toBe('﻿"a","b"\r\n"1","2"\r\n"3","4"');
   });
 
@@ -28,9 +28,9 @@ describe("buildCsvChunks", () => {
 
     expect(chunks).toHaveLength(3);
     expect(chunks.map((c) => c.filename)).toEqual([
-      "export_1-3.csv",
-      "export_2-3.csv",
-      "export_3-3.csv",
+      "export_1-3.txt",
+      "export_2-3.txt",
+      "export_3-3.txt",
     ]);
     expect(chunks[0].content.split("\r\n")).toHaveLength(1001); // header + 1000 rows
     expect(chunks[2].content.split("\r\n")).toHaveLength(501); // header + 500 rows
@@ -39,7 +39,7 @@ describe("buildCsvChunks", () => {
   it("returns one empty-body chunk for zero rows", () => {
     const chunks = buildCsvChunks("export", ["code"], []);
     expect(chunks).toHaveLength(1);
-    expect(chunks[0].filename).toBe("export.csv");
+    expect(chunks[0].filename).toBe("export.txt");
     expect(chunks[0].content).toBe('﻿"code"');
   });
 });
