@@ -42,7 +42,7 @@ export function buildCsvChunks(
     const slice = rows.slice(i * chunkSize, (i + 1) * chunkSize);
     const suffix = chunkCount > 1 ? `_${i + 1}-${chunkCount}` : "";
     return {
-      filename: `${filenameBase}${suffix}.csv`,
+      filename: `${filenameBase}${suffix}.txt`,
       content: toCsvContent(headers, slice),
     };
   });
@@ -54,7 +54,7 @@ export function downloadCsvChunks(chunks: CsvChunk[], delayMs: number = DOWNLOAD
   function next() {
     if (i >= chunks.length) return;
     const { filename, content } = chunks[i];
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
