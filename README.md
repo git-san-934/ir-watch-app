@@ -18,7 +18,7 @@ GitHub Pages でホストする静的サイトです([https://git-san-934.github
 
 - ブラウザが一度取り込んだ開示情報は、× で削除するまで**永続的に**残ります(`src/lib/watchlist.ts` の `mergeArchivedDisclosures`)
 - 「更新」ボタン・再訪問・タブを開いたまま5分おきの自動チェック(タブに戻ってきた時も即チェック)のたびに、まだ取り込んでいない新着分だけを追加で取り込みます(差分マージ)
-- ただし、サーバー側(`scripts/fetch-tdnet.ts`)は直近30日分のTDnetデータしか保持していません。**30日以上サイトを開かないと、その間に出た開示情報は一度も取り込まれずに失われます**(取り込まれた後のものは永続的に残ります)。この期間は `scripts/fetch-tdnet.ts` の `DAYS` 定数で調整できます。
+- ただし、サーバー側(`scripts/fetch-tdnet.ts`)は直近90日分のTDnetデータしか保持していません。**90日以上サイトを開かないと、その間に出た開示情報は一度も取り込まれずに失われます**(取り込まれた後のものは永続的に残ります)。この期間は `scripts/fetch-tdnet.ts` の `DAYS` 定数で調整できます。
 
 ### 自社株買い集計の仕組み
 
@@ -42,7 +42,7 @@ GitHub Pages でホストする静的サイトです([https://git-san-934.github
 
 このミラー API は CORS ヘッダーを返さないため、ブラウザから直接 `fetch` できません(デプロイ後に実機で確認済み)。そのため以下の方式にしています:
 
-1. `scripts/fetch-tdnet.ts` が GitHub Actions 上(サーバー側、CORS の制約を受けない)で直近30日分の開示情報を取得し、`public/tdnet-disclosures.json` に書き出す
+1. `scripts/fetch-tdnet.ts` が GitHub Actions 上(サーバー側、CORS の制約を受けない)で直近90日分の開示情報を取得し、`public/tdnet-disclosures.json` に書き出す
 2. `next build` でこのファイルが静的サイトに同梱される
 3. ブラウザは同一オリジンの `tdnet-disclosures.json` を読み込み、登録銘柄でフィルタする(`src/lib/tdnet.ts` の `fetchDisclosuresSnapshot`)
 
