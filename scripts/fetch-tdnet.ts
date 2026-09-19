@@ -18,14 +18,14 @@
  * regardless of DAYS. DAYS only matters for a visitor who hasn't opened
  * the site in longer than this many days — anything published entirely
  * within that gap is missed, since there's no server keeping a longer
- * history. 30 days balances that risk against build time / file size.
+ * history. 90 days balances that risk against build time / file size.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fetchRecentDisclosures } from "../src/lib/tdnet";
 import { buildTreasuryStockSummary } from "../src/lib/treasury-stock";
 
-const DAYS = 30;
+const DAYS = 90;
 
 async function main() {
   const disclosures = await fetchRecentDisclosures(DAYS);
