@@ -49,3 +49,4 @@ next-env.d.ts
 /video/out/
 /video/node_modules/
 /video/avatar/*/.cache/
+/video/avatar/source/
