@@ -44,3 +44,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# video (MulmoCast) build output and local tools
+/video/out/
+/video/node_modules/
+/video/avatar/*/.cache/

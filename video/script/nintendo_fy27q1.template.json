@@ -1,0 +1,70 @@
+{
+  "data": "../data/nintendo_fy27q1.json",
+  "title": "{{@company}} {{@period}} 決算を1分で",
+  "speaker": "Meg",
+  "readings": {
+    "Switch 2": "スイッチツー"
+  },
+  "beats": [
+    {
+      "id": "opening",
+      "text": "こんにちは、メグです。今日は{{@company}}の決算を、のんびり1分で見ていきましょう。",
+      "slide": {
+        "type": "textSlide",
+        "title": "{{@company}} 決算",
+        "subtitle": "{{@period}}({{@announcedAt}} 発表)"
+      }
+    },
+    {
+      "id": "results",
+      "text": "4月から6月の売上は{{sales}}で、前の年より{{sales_yoy|abs}}減りました。でも営業利益は{{op_income}}で、{{op_income_multiple}}になっています。",
+      "slide": {
+        "type": "table",
+        "title": "{{@months}} の業績",
+        "header": ["", "金額", "前年同期比"],
+        "rows": [
+          ["売上高", "{{sales}}", "{{sales_yoy}}"],
+          ["営業利益", "{{op_income}}", "{{op_income_yoy}}({{op_income_multiple}})"],
+          ["営業利益率", "{{op_margin}}", "前年同期 {{op_margin_prev}}"]
+        ]
+      }
+    },
+    {
+      "id": "units",
+      "text": "売上が減った理由は、Switch 2の本体が{{switch2_hw_units}}と、発売初年度だった前の年より減ったことです。いっぽうソフトは{{switch2_sw_units}}で、{{switch2_sw_yoy|abs}}増えました。",
+      "slide": {
+        "type": "table",
+        "title": "Switch 2 の販売",
+        "header": ["", "数量", "前年同期比"],
+        "rows": [
+          ["本体", "{{switch2_hw_units}}", "{{switch2_hw_yoy}}"],
+          ["ソフト", "{{switch2_sw_units}}", "{{switch2_sw_yoy}}"]
+        ]
+      }
+    },
+    {
+      "id": "profit_reasons",
+      "text": "利益が増えたのは、ソフトの割合が増えたことと、アメリカの関税が{{tariff_refund}}戻ってきたことが理由です。この還付は、一時的な要因になりますね。",
+      "slide": {
+        "type": "textSlide",
+        "title": "利益が増えた理由",
+        "bullets": [
+          "ソフトの割合が増えた",
+          "米国の関税還付 {{tariff_refund}}(売上原価の減額)",
+          "関税還付は一時的な要因"
+        ]
+      }
+    },
+    {
+      "id": "forecast",
+      "text": "通期の予想は据え置きで、営業利益は{{fy_forecast_op_income}}。進捗は{{op_progress}}です。次の決算では、一時的な要因を除いた力を見ていきたいですね。投資判断は、ご自身でお願いします。",
+      "slide": {
+        "type": "progress",
+        "title": "通期予想(据え置き)",
+        "lines": ["売上高 {{fy_forecast_sales}}", "営業利益 {{fy_forecast_op_income}}"],
+        "progress": { "label": "営業利益の進捗", "current": "op_income", "target": "fy_forecast_op_income", "display": "{{op_progress}}" },
+        "footer": "投資判断はご自身でお願いします"
+      }
+    }
+  ]
+}

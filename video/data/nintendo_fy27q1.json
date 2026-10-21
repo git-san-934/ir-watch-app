@@ -1,0 +1,29 @@
+{
+  "id": "nintendo_fy27q1",
+  "company": "任天堂",
+  "period": "2027年3月期 第1四半期",
+  "months": "2026年4月〜6月",
+  "announcedAt": "2026-08-06",
+  "sources": [
+    "任天堂 決算短信(2026年8月6日)",
+    "任天堂 決算説明資料(2026年8月6日)"
+  ],
+  "figures": {
+    "sales": { "label": "売上高", "value": 5178, "unit": "億円" },
+    "sales_yoy": { "label": "売上高 前年同期比", "value": -9.5, "unit": "%", "decimals": 1, "signed": true },
+    "op_income": { "label": "営業利益", "value": 1425, "unit": "億円" },
+    "op_income_yoy": { "label": "営業利益 前年同期比", "value": 150.5, "unit": "%", "decimals": 1, "signed": true },
+    "op_income_multiple": { "label": "営業利益 前年同期比(倍)", "value": 2.5, "unit": "倍", "decimals": 1, "approx": true },
+    "op_margin": { "label": "営業利益率", "value": 27.5, "unit": "%", "decimals": 1 },
+    "op_margin_prev": { "label": "営業利益率(前年同期)", "value": 9.9, "unit": "%", "decimals": 1 },
+    "switch2_hw_units": { "label": "Switch 2 本体", "value": 382, "unit": "万台" },
+    "switch2_hw_yoy": { "label": "Switch 2 本体 前年同期比", "value": -34.4, "unit": "%", "decimals": 1, "signed": true },
+    "switch2_sw_units": { "label": "Switch 2 ソフト", "value": 946, "unit": "万本" },
+    "switch2_sw_yoy": { "label": "Switch 2 ソフト 前年同期比", "value": 9.2, "unit": "%", "decimals": 1, "signed": true },
+    "tariff_refund": { "label": "関税還付", "value": 3, "unit": "億ドル", "approx": true, "note": "売上原価の減額、一時的要因" },
+    "fy_forecast_sales": { "label": "通期予想 売上高(据え置き)", "value": 20500, "unit": "億円" },
+    "fy_forecast_op_income": { "label": "通期予想 営業利益(据え置き)", "value": 3700, "unit": "億円" },
+    "op_progress": { "label": "営業利益の進捗率", "value": 38, "unit": "%", "decimals": 0, "approx": true }
+  },
+  "forecastUnchanged": true
+}

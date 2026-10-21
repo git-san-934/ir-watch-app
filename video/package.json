@@ -1,0 +1,10 @@
+{
+  "name": "ir-watch-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "verify": "node scripts/verify.mjs",
+    "test": "node --test 'test/*.test.mjs'"
+  }
+}
