@@ -23,7 +23,7 @@
     "tariff_refund": { "label": "関税還付", "value": 3, "unit": "億ドル", "approx": true, "note": "売上原価の減額、一時的要因" },
     "fy_forecast_sales": { "label": "通期予想 売上高(据え置き)", "value": 20500, "unit": "億円" },
     "fy_forecast_op_income": { "label": "通期予想 営業利益(据え置き)", "value": 3700, "unit": "億円" },
-    "op_progress": { "label": "営業利益の進捗率", "value": 38, "unit": "%", "decimals": 0, "approx": true }
+    "op_progress": { "label": "営業利益の進捗率", "value": 38, "unit": "%", "decimals": 0, "approx": true, "rounding": "floor", "note": "1,425÷3,700=38.5%。切り捨てで約38%とする" }
   },
   "forecastUnchanged": true
 }

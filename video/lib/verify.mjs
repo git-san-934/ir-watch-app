@@ -41,7 +41,12 @@ const strings = (value, at = "") => {
 
 const svgTexts = (svg) => [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"));
 
-const round = (v, decimals) => Math.round(v * 10 ** decimals) / 10 ** decimals;
+// A figure rounds half up unless data says otherwise ("rounding": "floor" keeps a value as it was announced).
+const ROUNDING = {
+  round: { name: "四捨五入", fn: Math.round },
+  floor: { name: "切り捨て", fn: Math.floor },
+};
+const roundTo = (v, decimals, fn) => fn(v * 10 ** decimals + 1e-9) / 10 ** decimals;
 
 /** Figures that can be recomputed from others. slack widens the tolerance when the inputs are rounded. */
 export const DERIVED = [
@@ -60,12 +65,15 @@ export const checkDerived = (data) =>
   DERIVED.map(({ key, from, calc, slack = 0 }) => {
     const fig = data.figures[key];
     const decimals = fig.decimals ?? 0;
+    const rounding = ROUNDING[fig.rounding ?? "round"];
+    if (!rounding) return { level: "error", key, detail: `${fig.label}: rounding "${fig.rounding}" は round か floor にしてください` };
     const derived = calc(data.figures);
-    const diff = Math.abs(derived - fig.value);
-    const half = 0.5 * 10 ** -decimals + 1e-9;
-    const detail = `${fig.label}: データ ${formatFigure(fig)} / 計算 ${derived.toFixed(decimals + 2)}(${from}、四捨五入すると ${round(derived, decimals)})`;
-    if (diff <= half + slack) return { level: "ok", key, detail };
-    if (fig.approx && diff <= 2 * half + slack) return { level: "warn", key, detail: `${detail} — 「約」の値が四捨五入と合いません` };
+    const expected = roundTo(derived, decimals, rounding.fn);
+    const diff = Math.abs(expected - fig.value);
+    const unit = 10 ** -decimals;
+    const detail = `${fig.label}: データ ${formatFigure(fig)} / 計算 ${derived.toFixed(decimals + 2)}(${from}、${rounding.name}すると ${expected})`;
+    if (diff <= 1e-9 || Math.abs(derived - fig.value) <= unit / 2 + slack) return { level: "ok", key, detail };
+    if (fig.approx && diff <= unit + 1e-9) return { level: "warn", key, detail: `${detail} — 「約」の値が${rounding.name}と合いません` };
     return { level: "error", key, detail };
   });
 

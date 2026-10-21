@@ -48,3 +48,11 @@ test("fails investment advice", () => {
 test("fails an unknown placeholder", () => {
   assert.throws(() => fill("{{nope}}", data), /unknown figure/);
 });
+
+test("checks a derived figure with the rounding the data names", async () => {
+  const { checkDerived } = await import("../lib/verify.mjs");
+  const level = (rounding) =>
+    checkDerived({ ...data, figures: { ...data.figures, op_progress: { ...data.figures.op_progress, rounding } } }).find((r) => r.key === "op_progress").level;
+  assert.equal(level("floor"), "ok"); // 38.51 -> 38
+  assert.equal(level(undefined), "warn"); // 38.51 rounds to 39
+});
