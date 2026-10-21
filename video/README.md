@@ -51,6 +51,13 @@ Docker Hub の公式イメージ `voicevox/voicevox_engine:cpu-latest` の `/opt
 ## MulmoCast まわりのメモ
 
 - VOICEVOX は MulmoCast の TTS に含まれないので、各場面の `audio`(`type: "audio"`)に wav を指定します。OpenAI のキーは不要です。
-- アバターは `speechParams.speakers.Meg.avatar.source` に Mesh Avatar Studio のプロジェクトを指定すると、口パク付きで重なります。口の動きは台本の文字と音声の強制アライメントで合わせます(`npm i avatarscript onnxruntime-node`、初回に Hugging Face からモデル 635MB をダウンロード)。
+- アバターの場所は環境変数 `AVATAR_DIR` で指定します(画像を含むので、このリポジトリには置きません)。
+  Mesh Avatar Studio の今の `avatar.json`(`"format": "mesh-avatar"`)は avatarscript 0.4 が読めないため、
+  avatarscript 形式の `avatar.json` を別フォルダに置き、`root` で Studio のプロジェクトを指しています:
+  `{"format":"avatarscript-avatar/1","name":"meg","runtime":"mesh-avatar/1","root":"<projects/meg への相対パス>","assets":{"rig":"rig.json","layers":"built/layers.json"}}`
+- アバターは `speechParams.speakers.Meg.avatar.source` に Mesh Avatar Studio のプロジェクトを指定すると、口パク付きで重なります。口の動きは台本の文字と音声の強制アライメントで合わせます(`npm i avatarscript onnxruntime-node`、初回に Hugging Face からモデル 635MB をダウンロード。
+  実体は `us.aws.cdn.hf.co` などの CDN から配信されるので、そのホストも許可が必要。Node の fetch はプロキシを使わないため、
+  `~/.cache/avatarscript/models/` に curl で置いておく)。
+- onnxruntime-node は `ONNXRUNTIME_NODE_INSTALL=skip npm i onnxruntime-node` で入れます(CPU 版は同梱、GPU 版の追加ダウンロードを省く)。
 - MulmoCast の `svg` 画像タイプは描画処理がないため、SVG は Chromium で PNG にして `image` タイプで渡しています。
 - root で動かす Chromium には `--no-sandbox` が必要です。MulmoCast は `CI=true` のときに付けます。

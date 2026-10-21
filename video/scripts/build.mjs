@@ -4,7 +4,8 @@ import path from "node:path";
 import { build, VIDEO_DIR } from "../lib/build.mjs";
 
 const templatePath = path.resolve(process.argv[2] ?? path.join(VIDEO_DIR, "script", "nintendo_fy27q1.template.json"));
-const avatarDir = path.join(VIDEO_DIR, "avatar", "meg");
+// the Mesh Avatar Studio project; it stays in that repository's projects/ (never committed here)
+const avatarDir = path.resolve(process.env.AVATAR_DIR ?? path.join(VIDEO_DIR, "avatar", "meg"));
 const { scriptPath, script } = build(templatePath, { avatar: fs.existsSync(avatarDir) ? avatarDir : undefined });
 
 console.log(`wrote ${path.relative(process.cwd(), scriptPath)}`);
