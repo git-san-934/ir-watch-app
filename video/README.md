@@ -21,6 +21,7 @@ avatar/meg/                            Mesh Avatar Studio のプロジェクト(
 export CHROME_PATH=/path/to/chrome   # スライド SVG を PNG にするため
 npm run build    # data + テンプレート -> out/
 npm run verify   # out/ の数字がすべて data と一致するか確認(--strict で警告も失敗扱い)
+node scripts/voicevox.mjs --speaker 14 [--speed 1.08]   # VOICEVOX で out/audio/*.wav を作る(もう一度 build すると台本に入る)
 npm test
 npx mulmo movie out/nintendo_fy27q1.mulmo.json   # 動画化(mulmocast 2.19 以降)
 ```
@@ -40,6 +41,12 @@ npx mulmo movie out/nintendo_fy27q1.mulmo.json   # 動画化(mulmocast 2.19 以�
 4. VOICEVOX 用テキストが台本と同じ(読み替えた語以外)
 5. 計算で出せる数字(営業利益率、約2.5倍、進捗率、前年同期の営業利益率)が元の数字と合う
 6. 「買い」「売り」などの投資判断の言葉がない
+
+## VOICEVOX エンジン
+
+Docker Hub の公式イメージ `voicevox/voicevox_engine:cpu-latest` の `/opt/voicevox_engine` を取り出して
+`./run --host 127.0.0.1 --port 50021` で起動しています(Docker なしで動きます)。
+`scripts/voicevox.mjs` は `out/audio/readings.txt` に各行の読み(カタカナ)と長さも書き出すので、数字の読み間違いを確認できます。
 
 ## MulmoCast まわりのメモ
 
