@@ -2,6 +2,7 @@
   "data": "../data/nintendo_fy27q1.json",
   "title": "{{@company}} {{@period}} 決算を1分で",
   "speaker": "Meg",
+  "voice": { "engine": "VOICEVOX", "character": "冥鳴ひまり", "style": "ノーマル", "speaker": 14, "speed": 1.08 },
   "readings": {
     "Switch 2": "スイッチツー"
   },
