@@ -21,6 +21,7 @@ import {
   type TreasuryStockSummaryRow,
 } from "@/lib/tdnet";
 import { buildCsvChunks, downloadCsvChunks } from "@/lib/csv";
+import { yahooFinanceUrl } from "@/lib/yahoo-finance";
 
 type DisclosureItem = Disclosure & { isNew: boolean };
 type Tab = "watchlist" | "treasury";
@@ -51,6 +52,28 @@ function formatOkuYen(amount: number | null): string {
   if (amount === null) return "—";
   const oku = amount / YEN_PER_OKU;
   return `${oku.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}億円`;
+}
+
+function YahooFinanceLink({
+  code,
+  name,
+  className = "",
+}: {
+  code: string;
+  name: string;
+  className?: string;
+}) {
+  return (
+    <a
+      href={yahooFinanceUrl(code)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${name} をYahoo!ファイナンスで見る`}
+      className={`underline-offset-2 hover:underline ${className}`}
+    >
+      {name}
+    </a>
+  );
 }
 
 function sortByPublishedAtDesc(a: Disclosure, b: Disclosure): number {
@@ -313,7 +336,7 @@ export default function Dashboard() {
                 className="flex items-center gap-2 rounded-full border border-zinc-300 py-1 pl-3 pr-1 text-sm dark:border-zinc-700"
               >
                 <span className="text-zinc-500 dark:text-zinc-400">{c.code}</span>
-                <span>{c.name}</span>
+                <YahooFinanceLink code={c.code} name={c.name} />
                 <button
                   type="button"
                   onClick={() => handleRemoveCompany(c.id)}
@@ -410,7 +433,7 @@ export default function Dashboard() {
                           </span>
                         )}
                         <span>{d.code}</span>
-                        <span>{d.companyName}</span>
+                        <YahooFinanceLink code={d.code} name={d.companyName} />
                         <span>{formatDate(d.publishedAt)}</span>
                       </div>
                       <a
@@ -466,7 +489,9 @@ export default function Dashboard() {
                     {treasurySummary.map((row) => (
                       <tr key={row.code}>
                         <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">{row.code}</td>
-                        <td className="py-2 pr-3">{row.companyName}</td>
+                        <td className="py-2 pr-3">
+                          <YahooFinanceLink code={row.code} name={row.companyName} />
+                        </td>
                         <td className="py-2 pr-3 whitespace-nowrap">
                           {formatOkuYen(row.lastMonthAmountYen)}
                         </td>
